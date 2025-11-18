@@ -1,72 +1,117 @@
-from database.connection import get_connection
+"""CRUD helpers for proveedores linked to productos."""
+
+from __future__ import annotations
+
+from typing import Callable, Optional
+
+from DB.connection import get_connection
+
 
 class ProvidersCRUD:
+    """Administra operaciones CRUD de la tabla proveedores."""
 
-    #Nombre: create_provider
-    #Propósito: Crear un proveedor con su producto y costo
-    def create_provider(self, idprov, codprod, costo):
-        conn = get_connection()
-        cursor = conn.cursor()
+    def __init__(self, connection_factory: Callable = get_connection) -> None:
+        self._connection_factory = connection_factory
 
-        cursor.execute("SELECT idprov FROM proveedores WHERE idprov = ?", (idprov,))
-        if cursor.fetchone():
+    def create_provider(
+        self,
+        idprov: str,
+        codprod: str,
+        descripcion: str,
+        costo: float,
+        direccion: str,
+        telefono: str,
+    ) -> tuple[bool, str]:
+        """Create a provider ensuring both uniqueness and FK integrity."""
+        conn = self._connection_factory()
+        try:
+            cursor = conn.cursor()
+            cursor.execute("SELECT 1 FROM proveedores WHERE idprov = ?", (idprov,))
+            if cursor.fetchone():
+                return False, "El proveedor ya existe."
+
+            cursor.execute("SELECT 1 FROM productos WHERE codprod = ?", (codprod,))
+            if not cursor.fetchone():
+                return False, "El producto asociado no existe."
+
+            cursor.execute(
+                """
+                INSERT INTO proveedores(idprov, codprod, descripcion, costo, direccion, telefono)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (idprov, codprod, descripcion, costo, direccion, telefono),
+            )
+            conn.commit()
+            return True, "Proveedor creado."
+        finally:
             conn.close()
-            return False, "El proveedor ya existe."
 
-        cursor.execute("""
-            INSERT INTO proveedores(idprov, codprod, costo)
-            VALUES (?, ?, ?)
-        """, (idprov, codprod, costo))
-
-        conn.commit()
-        conn.close()
-        return True, "Proveedor creado."
-
-    #Nombre: read_provider
-    #Propósito: Leer proveedor por ID
-    def read_provider(self, idprov):
-        conn = get_connection()
-        cursor = conn.cursor()
-
-        cursor.execute("SELECT * FROM proveedores WHERE idprov = ?", (idprov,))
-        data = cursor.fetchone()
-
-        conn.close()
-        return data
-
-    #Nombre: update_provider
-    #Propósito: Actualizar proveedor existente
-    def update_provider(self, idprov, codprod, costo):
-        conn = get_connection()
-        cursor = conn.cursor()
-
-        cursor.execute("SELECT idprov FROM proveedores WHERE idprov = ?", (idprov,))
-        if not cursor.fetchone():
+    def read_provider(self, idprov: str) -> Optional[dict]:
+        """Return provider data as a dict when available."""
+        conn = self._connection_factory()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT idprov, codprod, descripcion, costo, direccion, telefono
+                FROM proveedores
+                WHERE idprov = ?
+                """,
+                (idprov,),
+            )
+            row = cursor.fetchone()
+            if row is None:
+                return None
+            columns = [desc[0] for desc in cursor.description]
+            return dict(zip(columns, row))
+        finally:
             conn.close()
-            return False, "Proveedor no existe."
 
-        cursor.execute("""
-            UPDATE proveedores
-            SET codprod=?, costo=?
-            WHERE idprov=?
-        """, (codprod, costo, idprov))
+    def update_provider(
+        self,
+        idprov: str,
+        codprod: str,
+        descripcion: str,
+        costo: float,
+        direccion: str,
+        telefono: str,
+    ) -> tuple[bool, str]:
+        """Update provider data, validating its presence first."""
+        conn = self._connection_factory()
+        try:
+            cursor = conn.cursor()
+            cursor.execute("SELECT 1 FROM proveedores WHERE idprov = ?", (idprov,))
+            if not cursor.fetchone():
+                return False, "Proveedor no existe."
 
-        conn.commit()
-        conn.close()
-        return True, "Proveedor actualizado."
+            cursor.execute("SELECT 1 FROM productos WHERE codprod = ?", (codprod,))
+            if not cursor.fetchone():
+                return False, "El producto asociado no existe."
 
-    #Nombre: delete_provider
-    #Propósito: Eliminar proveedor
-    def delete_provider(self, idprov):
-        conn = get_connection()
-        cursor = conn.cursor()
-
-        cursor.execute("SELECT idprov FROM proveedores WHERE idprov = ?", (idprov,))
-        if not cursor.fetchone():
+            cursor.execute(
+                """
+                UPDATE proveedores
+                SET codprod = ?, descripcion = ?, costo = ?, direccion = ?, telefono = ?
+                WHERE idprov = ?
+                """,
+                (codprod, descripcion, costo, direccion, telefono, idprov),
+            )
+            conn.commit()
+            return True, "Proveedor actualizado."
+        finally:
             conn.close()
-            return False, "Proveedor no existe."
 
-        cursor.execute("DELETE FROM proveedores WHERE idprov = ?", (idprov,))
-        conn.commit()
-        conn.close()
-        return True, "Proveedor eliminado."
+    def delete_provider(self, idprov: str) -> tuple[bool, str]:
+        """Remove provider rows safely."""
+        conn = self._connection_factory()
+        try:
+            cursor = conn.cursor()
+            cursor.execute("SELECT 1 FROM proveedores WHERE idprov = ?", (idprov,))
+            if not cursor.fetchone():
+                return False, "Proveedor no existe."
+
+            cursor.execute("DELETE FROM proveedores WHERE idprov = ?", (idprov,))
+            conn.commit()
+            return True, "Proveedor eliminado."
+        finally:
+            conn.close()

@@ -1,4 +1,4 @@
-from db.connection import get_connection
+from DB.connection import get_connection
 
 def create_user(nomusu, clave, nivel):
     """
