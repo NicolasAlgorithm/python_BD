@@ -1,2 +1,4 @@
-tk
-sqlite3-binary
+# No necesitas instalar sqlite3 ni tkinter por pip
+# Solo incluye librerías externas si las usas
+
+# Ejemplo limpio:
