@@ -11,6 +11,8 @@ from DB.connection import get_connection
 from DB.init_db import initialize_database
 from Modules.Products import ProductsCRUD
 from Modules.Providers import ProvidersCRUD
+from Modules.Users import create_user, delete_user
+from Modules.Custumers import create_client, delete_client
 
 
 class TestDatabaseCrud(unittest.TestCase):
@@ -36,6 +38,8 @@ class TestDatabaseCrud(unittest.TestCase):
             # Keep FK checks happy by clearing child tables first.
             conn.execute("DELETE FROM proveedores;")
             conn.execute("DELETE FROM productos;")
+            conn.execute("DELETE FROM usuarios;")
+            conn.execute("DELETE FROM clientes;")
             conn.commit()
         finally:
             conn.close()
@@ -77,6 +81,10 @@ class TestDatabaseCrud(unittest.TestCase):
         self.assertFalse(duplicated)
         self.assertIn("ya existe", message.lower())
 
+        missing, missing_message = self.products.delete_product("P999")
+        self.assertFalse(missing)
+        self.assertIn("no existe", missing_message.lower())
+
     def test_provider_crud_flow(self) -> None:
         self.products.create_product(
             "P100", "Monitor", "Monitor 24 pulgadas", 0.19, 800.0
@@ -116,6 +124,10 @@ class TestDatabaseCrud(unittest.TestCase):
         self.assertTrue(deleted, delete_message)
         self.assertIsNone(self.providers.read_provider("PRV-1"))
 
+        missing, missing_message = self.providers.delete_provider("PRV-404")
+        self.assertFalse(missing)
+        self.assertIn("no existe", missing_message.lower())
+
     def test_provider_requires_existing_product(self) -> None:
         created, message = self.providers.create_provider(
             "PRV-404",
@@ -127,6 +139,64 @@ class TestDatabaseCrud(unittest.TestCase):
         )
         self.assertFalse(created)
         self.assertIn("no existe", message.lower())
+
+        self.products.create_product(
+            "P500", "Parlantes", "Parlantes bluetooth", 0.19, 200.0
+        )
+        created, message = self.providers.create_provider(
+            "PRV-500",
+            "P500",
+            "Mayorista audio",
+            150.0,
+            "Av. 555",
+            "3005555555",
+        )
+        self.assertTrue(created, message)
+
+        duplicated, duplicate_message = self.providers.create_provider(
+            "PRV-500",
+            "P500",
+            "Mayorista audio",
+            150.0,
+            "Av. 555",
+            "3005555555",
+        )
+        self.assertFalse(duplicated)
+        self.assertIn("ya existe", duplicate_message.lower())
+
+    def test_user_create_and_delete_validations(self) -> None:
+        created, message = create_user("admin", "clave", 1)
+        self.assertTrue(created, message)
+
+        duplicated, duplicate_message = create_user("admin", "otra", 2)
+        self.assertFalse(duplicated)
+        self.assertIn("ya existe", duplicate_message.lower())
+
+        deleted, delete_message = delete_user("admin")
+        self.assertTrue(deleted, delete_message)
+
+        missing, missing_message = delete_user("admin")
+        self.assertFalse(missing)
+        self.assertIn("no existe", missing_message.lower())
+
+    def test_client_create_and_delete_validations(self) -> None:
+        created, message = create_client(
+            "CL001", "Cliente Demo", "Calle 1", "3000000001", "Bogota"
+        )
+        self.assertTrue(created, message)
+
+        duplicated, duplicate_message = create_client(
+            "CL001", "Cliente Demo", "Calle 1", "3000000001", "Bogota"
+        )
+        self.assertFalse(duplicated)
+        self.assertIn("ya existe", duplicate_message.lower())
+
+        deleted, delete_message = delete_client("CL001")
+        self.assertTrue(deleted, delete_message)
+
+        missing, missing_message = delete_client("CL001")
+        self.assertFalse(missing)
+        self.assertIn("no existe", missing_message.lower())
 
 
 if __name__ == "__main__":
