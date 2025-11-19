@@ -18,6 +18,7 @@ TABLE_DEFINITIONS: dict[str, str] = {
         CREATE TABLE IF NOT EXISTS usuarios (
             nomusu TEXT PRIMARY KEY,
             clave TEXT NOT NULL,
+            salt TEXT NOT NULL,
             nivel INTEGER NOT NULL CHECK (nivel IN (1, 2, 3))
         );
     """,
@@ -54,6 +55,7 @@ TABLE_DEFINITIONS: dict[str, str] = {
     "inventarios": """
         CREATE TABLE IF NOT EXISTS inventarios (
             codprod TEXT PRIMARY KEY,
+            nomprod TEXT NOT NULL,
             cantidad INTEGER NOT NULL DEFAULT 0 CHECK (cantidad >= 0),
             stock_minimo INTEGER NOT NULL DEFAULT 0 CHECK (stock_minimo >= 0),
             iva REAL NOT NULL DEFAULT 0,
@@ -130,6 +132,31 @@ def _execute_statements(cursor: sqlite3.Cursor, statements: Iterable[str]) -> No
         cursor.execute(statement)
 
 
+def _column_exists(cursor: sqlite3.Cursor, table: str, column: str) -> bool:
+    cursor.execute(f"PRAGMA table_info({table})")
+    return any(row[1] == column for row in cursor.fetchall())
+
+
+def _apply_migrations(connection: sqlite3.Connection) -> None:
+    cursor = connection.cursor()
+
+    if _column_exists(cursor, "usuarios", "nomusu") and not _column_exists(cursor, "usuarios", "salt"):
+        cursor.execute("ALTER TABLE usuarios ADD COLUMN salt TEXT")
+        cursor.execute("UPDATE usuarios SET salt = '' WHERE salt IS NULL")
+
+    if _column_exists(cursor, "inventarios", "codprod") and not _column_exists(cursor, "inventarios", "nomprod"):
+        cursor.execute("ALTER TABLE inventarios ADD COLUMN nomprod TEXT")
+        cursor.execute(
+            """
+            UPDATE inventarios
+            SET nomprod = (
+                SELECT nomprod FROM productos WHERE productos.codprod = inventarios.codprod
+            )
+            WHERE nomprod IS NULL
+            """
+        )
+
+
 def initialize_database(db_path: Path = DB_PATH) -> None:
     """
     Purpose: Create all mandatory tables, indexes, and views for the project.
@@ -144,6 +171,7 @@ def initialize_database(db_path: Path = DB_PATH) -> None:
         _execute_statements(cursor, TABLE_DEFINITIONS.values())
         _execute_statements(cursor, INDEX_DEFINITIONS.values())
         _execute_statements(cursor, VIEW_DEFINITIONS.values())
+        _apply_migrations(connection)
 
         connection.commit()
     finally:

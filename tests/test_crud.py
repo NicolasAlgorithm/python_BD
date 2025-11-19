@@ -41,7 +41,7 @@ class MinimalCrudTests(unittest.TestCase):
     def tearDown(self) -> None:
         conn = get_connection()
         try:
-            for table in ("ventas", "inventarios", "productos", "clientes", "users"):
+            for table in ("ventas", "inventarios", "productos", "clientes", "usuarios"):
                 try:
                     conn.execute(f"DELETE FROM {table};")
                 except sqlite3.OperationalError:

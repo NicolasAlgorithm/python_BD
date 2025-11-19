@@ -1,95 +1,121 @@
-from tkinter import Tk, Frame, Label, Entry, Button, Listbox, END, messagebox
-from Modules.Users import Users  # Assuming Users.py contains the necessary functions for user management
+import tkinter as tk
+from tkinter import END, Frame, Label, Listbox, Spinbox, Tk, messagebox
 
-class UsersCRUD:
-    def __init__(self, master):
+from Modules.Users import UsersCRUD
+
+
+class UsersWindow:
+    """Ventana CRUD para administrar usuarios según la tabla `usuarios`."""
+
+    def __init__(self, master: Tk) -> None:
+        self._service = UsersCRUD()
         self.master = master
-        self.master.title("Users CRUD")
-        
-        self.frame = Frame(self.master)
-        self.frame.pack(padx=10, pady=10)
+        self.master.title("Administrar usuarios")
 
-        self.label_id = Label(self.frame, text="User ID:")
-        self.label_id.grid(row=0, column=0)
-        self.entry_id = Entry(self.frame)
-        self.entry_id.grid(row=0, column=1)
+        container = Frame(self.master)
+        container.pack(padx=12, pady=12)
 
-        self.label_name = Label(self.frame, text="Name:")
-        self.label_name.grid(row=1, column=0)
-        self.entry_name = Entry(self.frame)
-        self.entry_name.grid(row=1, column=1)
+        Label(container, text="Usuario").grid(row=0, column=0, sticky="w")
+        self.entry_username = tk.Entry(container)
+        self.entry_username.grid(row=0, column=1, sticky="ew")
 
-        self.label_email = Label(self.frame, text="Email:")
-        self.label_email.grid(row=2, column=0)
-        self.entry_email = Entry(self.frame)
-        self.entry_email.grid(row=2, column=1)
+        Label(container, text="Contraseña").grid(row=1, column=0, sticky="w")
+        self.entry_password = tk.Entry(container, show="*")
+        self.entry_password.grid(row=1, column=1, sticky="ew")
 
-        self.button_create = Button(self.frame, text="Create", command=self.create_user)
-        self.button_create.grid(row=3, column=0)
+        Label(container, text="Nivel (1-3)").grid(row=2, column=0, sticky="w")
+        self.spin_level = Spinbox(container, from_=1, to=3, width=5)
+        self.spin_level.grid(row=2, column=1, sticky="w")
 
-        self.button_read = Button(self.frame, text="Read", command=self.read_user)
-        self.button_read.grid(row=3, column=1)
+        buttons = Frame(container)
+        buttons.grid(row=3, column=0, columnspan=2, pady=8)
 
-        self.button_update = Button(self.frame, text="Update", command=self.update_user)
-        self.button_update.grid(row=4, column=0)
+        tk.Button(buttons, text="Crear", command=self.create_user).grid(row=0, column=0, padx=4)
+        tk.Button(buttons, text="Actualizar", command=self.update_user).grid(row=0, column=1, padx=4)
+        tk.Button(buttons, text="Eliminar", command=self.delete_user).grid(row=0, column=2, padx=4)
 
-        self.button_delete = Button(self.frame, text="Delete", command=self.delete_user)
-        self.button_delete.grid(row=4, column=1)
+        Label(container, text="Usuarios registrados").grid(row=4, column=0, columnspan=2, sticky="w", pady=(10, 0))
+        self.listbox_users = Listbox(container, width=40, height=8)
+        self.listbox_users.grid(row=5, column=0, columnspan=2, sticky="nsew")
+        self.listbox_users.bind("<<ListboxSelect>>", self.load_selection)
 
-        self.listbox_users = Listbox(self.frame)
-        self.listbox_users.grid(row=5, column=0, columnspan=2)
+        container.columnconfigure(1, weight=1)
 
-        self.load_users()
+        self.refresh_users()
 
-    def load_users(self):
+    def refresh_users(self) -> None:
         self.listbox_users.delete(0, END)
-        users = Users.get_all_users()  # Assuming this function retrieves all users
-        for user in users:
-            self.listbox_users.insert(END, f"{user['id']} - {user['name']} - {user['email']}")
+        for user in self._service.list_users():
+            self.listbox_users.insert(END, f"{user['nomusu']} (Nivel {user['nivel']})")
 
-    def create_user(self):
-        user_id = self.entry_id.get()
-        name = self.entry_name.get()
-        email = self.entry_email.get()
-        if Users.create_user(user_id, name, email):  # Assuming this function creates a user
-            messagebox.showinfo("Success", "User created successfully!")
-            self.load_users()
+    def _get_form_data(self) -> tuple[str, str, int]:
+        username = self.entry_username.get().strip()
+        password = self.entry_password.get().strip()
+        level = int(self.spin_level.get())
+        return username, password, level
+
+    def create_user(self) -> None:
+        username, password, level = self._get_form_data()
+        if not username or not password:
+            messagebox.showerror("Validación", "Usuario y contraseña son obligatorios.")
+            return
+        ok, msg = self._service.create_user(username, password, level)
+        if ok:
+            messagebox.showinfo("Usuarios", msg)
+            self.entry_password.delete(0, END)
+            self.refresh_users()
         else:
-            messagebox.showerror("Error", "Failed to create user.")
+            messagebox.showerror("Usuarios", msg)
 
-    def read_user(self):
-        selected_user = self.listbox_users.curselection()
-        if selected_user:
-            user_info = self.listbox_users.get(selected_user)
-            user_id = user_info.split(" - ")[0]
-            user = Users.get_user(user_id)  # Assuming this function retrieves a user by ID
-            if user:
-                self.entry_id.delete(0, END)
-                self.entry_id.insert(0, user['id'])
-                self.entry_name.delete(0, END)
-                self.entry_name.insert(0, user['name'])
-                self.entry_email.delete(0, END)
-                self.entry_email.insert(0, user['email'])
-
-    def update_user(self):
-        user_id = self.entry_id.get()
-        name = self.entry_name.get()
-        email = self.entry_email.get()
-        if Users.update_user(user_id, name, email):  # Assuming this function updates a user
-            messagebox.showinfo("Success", "User updated successfully!")
-            self.load_users()
+    def update_user(self) -> None:
+        username, password, level = self._get_form_data()
+        if not username:
+            messagebox.showerror("Validación", "Debe seleccionar o ingresar un usuario.")
+            return
+        password_arg = password or None
+        ok, msg = self._service.update_user(username, password_arg, level)
+        if ok:
+            messagebox.showinfo("Usuarios", msg)
+            self.entry_password.delete(0, END)
+            self.refresh_users()
         else:
-            messagebox.showerror("Error", "Failed to update user.")
+            messagebox.showerror("Usuarios", msg)
 
-    def delete_user(self):
-        user_id = self.entry_id.get()
-        if Users.delete_user(user_id):  # Assuming this function deletes a user
-            messagebox.showinfo("Success", "User deleted successfully!")
-            self.load_users()
+    def delete_user(self) -> None:
+        username = self.entry_username.get().strip()
+        if not username:
+            messagebox.showerror("Validación", "Debe elegir un usuario para eliminar.")
+            return
+        ok, msg = self._service.delete_user(username)
+        if ok:
+            messagebox.showinfo("Usuarios", msg)
+            self.entry_username.delete(0, END)
+            self.entry_password.delete(0, END)
+            self.refresh_users()
         else:
-            messagebox.showerror("Error", "Failed to delete user.")
+            messagebox.showerror("Usuarios", msg)
+
+    def load_selection(self, event) -> None:
+        selection = event.widget.curselection()
+        if not selection:
+            return
+        value = event.widget.get(selection[0])
+        username = value.split(" ")[0]
+        user = self._service.read_user(username)
+        if not user:
+            return
+        self.entry_username.delete(0, END)
+        self.entry_username.insert(0, user["nomusu"])
+        self.spin_level.delete(0, END)
+        self.spin_level.insert(0, user["nivel"])
+        self.entry_password.delete(0, END)
+
+
+def open_users_window() -> None:
+    root = Tk()
+    UsersWindow(root)
+    root.mainloop()
+
 
 if __name__ == "__main__":
-    root = Tk()
-    app = UsersCRUD(root)
-    root.mainloop()
+    open_users_window()
