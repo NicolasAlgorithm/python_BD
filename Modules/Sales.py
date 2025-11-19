@@ -172,3 +172,103 @@ class SalesCRUD:
             return [dict(zip(columns, row)) for row in rows]
         finally:
             conn.close()
+
+    def list_sales_by_date_range(self, start_date: str, end_date: str, username: Optional[str] = None) -> list[dict[str, Any]]:
+        """Return sales between start_date and end_date inclusive. Dates in 'YYYY-MM-DD' format."""
+        ok, msg = self._authorize(username, 1)
+        if not ok:
+            return []
+        conn = self._connection_factory()
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                """
+                SELECT id, fecha, codclie, codprod, nomprod, costovta, canti, vriva, subtotal, vrtotal
+                FROM ventas
+                WHERE fecha BETWEEN ? AND ?
+                ORDER BY fecha, id
+                """,
+                (start_date, end_date),
+            )
+            rows = cur.fetchall()
+            columns = [desc[0] for desc in cur.description]
+            return [dict(zip(columns, row)) for row in rows]
+        finally:
+            conn.close()
+
+    def list_sales_by_week(self, year: int, week: int, username: Optional[str] = None) -> list[dict[str, Any]]:
+        """
+        Return sales for a given year and week number.
+        week: ISO-like week number expected as integer (0-53). Uses SQLite strftime('%W') semantics.
+        """
+        ok, msg = self._authorize(username, 1)
+        if not ok:
+            return []
+        y = str(year)
+        wk = f"{week:02d}"
+        conn = self._connection_factory()
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                """
+                SELECT id, fecha, codclie, codprod, nomprod, costovta, canti, vriva, subtotal, vrtotal
+                FROM ventas
+                WHERE strftime('%Y', fecha) = ? AND strftime('%W', fecha) = ?
+                ORDER BY fecha, id
+                """,
+                (y, wk),
+            )
+            rows = cur.fetchall()
+            columns = [desc[0] for desc in cur.description]
+            return [dict(zip(columns, row)) for row in rows]
+        finally:
+            conn.close()
+
+    def list_sales_by_month(self, year: int, month: int, username: Optional[str] = None) -> list[dict[str, Any]]:
+        """Return sales for a specific year and month (month: 1-12)."""
+        ok, msg = self._authorize(username, 1)
+        if not ok:
+            return []
+        y = str(year)
+        m = f"{month:02d}"
+        conn = self._connection_factory()
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                """
+                SELECT id, fecha, codclie, codprod, nomprod, costovta, canti, vriva, subtotal, vrtotal
+                FROM ventas
+                WHERE strftime('%Y', fecha) = ? AND strftime('%m', fecha) = ?
+                ORDER BY fecha, id
+                """,
+                (y, m),
+            )
+            rows = cur.fetchall()
+            columns = [desc[0] for desc in cur.description]
+            return [dict(zip(columns, row)) for row in rows]
+        finally:
+            conn.close()
+
+    def list_sales_by_year(self, year: int, username: Optional[str] = None) -> list[dict[str, Any]]:
+        """Return sales for a specific year."""
+        ok, msg = self._authorize(username, 1)
+        if not ok:
+            return []
+        y = str(year)
+        conn = self._connection_factory()
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                """
+                SELECT id, fecha, codclie, codprod, nomprod, costovta, canti, vriva, subtotal, vrtotal
+                FROM ventas
+                WHERE strftime('%Y', fecha) = ?
+                ORDER BY fecha, id
+                """,
+                (y,),
+            )
+            rows = cur.fetchall()
+            columns = [desc[0] for desc in cur.description]
+            return [dict(zip(columns, row)) for row in rows]
+        finally:
+            conn.close()
