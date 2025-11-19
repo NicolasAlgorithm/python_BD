@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Callable, Optional
+from typing import Callable, Optional, Tuple
 
 from DB.connection import get_connection
 
@@ -12,6 +12,16 @@ class InventoriesCRUD:
 
     def __init__(self, connection_factory: Callable = get_connection) -> None:
         self._connection_factory = connection_factory
+
+    def _validate_values(self, cantidad: int, stock_minimo: int, costovta: float) -> Tuple[bool, str]:
+        """Validaciones comunes para cantidad, stock mínimo y precio."""
+        if cantidad < 0 or stock_minimo < 0:
+            return False, "Cantidad y stock mínimo deben ser valores no negativos."
+        if costovta < 0:
+            return False, "El precio de venta no puede ser negativo."
+        if cantidad < stock_minimo:
+            return False, "La cantidad disponible no puede ser menor que el stock mínimo."
+        return True, ""
 
     def create_inventory(
         self,
@@ -26,12 +36,9 @@ class InventoriesCRUD:
         try:
             cursor = conn.cursor()
 
-            if cantidad < 0 or stock_minimo < 0:
-                return False, "Cantidad y stock mínimo deben ser valores no negativos."
-            if costovta < 0:
-                return False, "El precio de venta no puede ser negativo."
-            if cantidad < stock_minimo:
-                return False, "La cantidad disponible no puede ser menor que el stock mínimo."
+            ok, msg = self._validate_values(cantidad, stock_minimo, costovta)
+            if not ok:
+                return False, msg
 
             cursor.execute("SELECT 1 FROM inventarios WHERE codprod = ?", (codprod,))
             if cursor.fetchone():
@@ -86,12 +93,9 @@ class InventoriesCRUD:
             if not cursor.fetchone():
                 return False, "Registro de inventario no existe."
 
-            if cantidad < 0 or stock_minimo < 0:
-                return False, "Cantidad y stock mínimo deben ser valores no negativos."
-            if costovta < 0:
-                return False, "El precio de venta no puede ser negativo."
-            if cantidad < stock_minimo:
-                return False, "La cantidad disponible no puede ser menor que el stock mínimo."
+            ok, msg = self._validate_values(cantidad, stock_minimo, costovta)
+            if not ok:
+                return False, msg
 
             cursor.execute("SELECT 1 FROM productos WHERE codprod = ?", (codprod,))
             if not cursor.fetchone():
