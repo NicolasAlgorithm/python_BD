@@ -1,92 +1,53 @@
-"""CRUD simple para usuarios con encriptación de contraseñas usando hashlib.sha256."""
+"""CRUD helpers for the usuarios table with basic validations."""
 
 from __future__ import annotations
 
-import hashlib
-import hmac
-import os
-from typing import Callable, Optional
+from typing import Tuple
 
 from DB.connection import get_connection
 
 
-class UsersCRUD:
-    """Operaciones CRUD básicas para usuarios con hashing de contraseñas."""
+def create_user(nomusu: str, clave: str, nivel: int) -> Tuple[bool, str]:
+    """Create a user only when the identifier is not already present."""
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT 1 FROM usuarios WHERE nomusu = ?", (nomusu,))
+        if cursor.fetchone():
+            return False, "El usuario ya existe."
 
-    def __init__(self, connection_factory: Callable = get_connection) -> None:
-        self._connection_factory = connection_factory
-
-    def _ensure_table(self, cursor) -> None:
         cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS users (
-                username TEXT PRIMARY KEY,
-                password_hash TEXT NOT NULL,
-                salt TEXT NOT NULL
-            )
-            """
+            "INSERT INTO usuarios (nomusu, clave, nivel) VALUES (?, ?, ?)",
+            (nomusu, clave, nivel),
         )
+        conn.commit()
+        return True, "Usuario creado."
+    finally:
+        conn.close()
 
-    def _hash_password(self, password: str, salt: str) -> str:
-        """Hash de contraseña usando SHA256 sobre salt + password."""
-        return hashlib.sha256((salt + password).encode("utf-8")).hexdigest()
 
-    def create_user(self, username: str, password: str) -> tuple[bool, str]:
-        """Crear usuario guardando salt y hash. Mensajes en español para tests."""
-        if not username or not password:
-            return False, "Nombre de usuario y contraseña requeridos."
-        conn = self._connection_factory()
-        try:
-            cur = conn.cursor()
-            self._ensure_table(cur)
-            cur.execute("SELECT 1 FROM users WHERE username = ?", (username,))
-            if cur.fetchone():
-                return False, "Usuario ya existe."
-            salt = os.urandom(16).hex()
-            pw_hash = self._hash_password(password, salt)
-            cur.execute(
-                "INSERT INTO users (username, password_hash, salt) VALUES (?, ?, ?)",
-                (username, pw_hash, salt),
-            )
-            conn.commit()
-            return True, "Usuario creado."
-        finally:
-            conn.close()
+def delete_user(nomusu: str) -> Tuple[bool, str]:
+    """Remove a user, ensuring it exists beforehand."""
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT 1 FROM usuarios WHERE nomusu = ?", (nomusu,))
+        if not cursor.fetchone():
+            return False, "El usuario no existe."
 
-    def read_user(self, username: str) -> Optional[dict]:
-        """Leer usuario (incluye hash y salt)."""
-        conn = self._connection_factory()
-        try:
-            cur = conn.cursor()
-            self._ensure_table(cur)
-            cur.execute(
-                "SELECT username, password_hash, salt FROM users WHERE username = ?",
-                (username,),
-            )
-            row = cur.fetchone()
-            if row is None:
-                return None
-            cols = [d[0] for d in cur.description]
-            return dict(zip(cols, row))
-        finally:
-            conn.close()
+        cursor.execute("DELETE FROM usuarios WHERE nomusu = ?", (nomusu,))
+        conn.commit()
+        return True, "Usuario eliminado."
+    finally:
+        conn.close()
 
-    def verify_user(self, username: str, password: str) -> tuple[bool, str]:
-        """Verificar contraseña: devuelve (True, msg) o (False, msg)."""
-        conn = self._connection_factory()
-        try:
-            cur = conn.cursor()
-            self._ensure_table(cur)
-            cur.execute(
-                "SELECT password_hash, salt FROM users WHERE username = ?", (username,)
-            )
-            row = cur.fetchone()
-            if row is None:
-                return False, "Usuario no encontrado."
-            stored_hash, salt = row
-            candidate = self._hash_password(password, salt)
-            if hmac.compare_digest(candidate, stored_hash):
-                return True, "Contraseña verificada."
-            return False, "Contraseña incorrecta."
-        finally:
-            conn.close()
+
+def get_users():
+    """Retrieve all users stored in the database."""
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT nomusu, clave, nivel FROM usuarios")
+        return cursor.fetchall()
+    finally:
+        conn.close()
