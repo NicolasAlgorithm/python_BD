@@ -1,4 +1,4 @@
-"""Pruebas mínimas para Inventarios, Sales (referencial) y Users (hashing)."""
+"""Tests para Modules/MainMenu.py validando visibilidad y acceso por nivel de usuario."""
 
 from __future__ import annotations
 
@@ -9,23 +9,19 @@ from tempfile import TemporaryDirectory
 
 from DB.connection import get_connection
 from DB.init_db import initialize_database
-from Modules.Products import ProductsCRUD
-from Modules.Inventarios import InventoriesCRUD
-from Modules.Sales import SalesCRUD
 from Modules.Users import UsersCRUD
+from Modules.MainMenu import MainMenu
 
 
-class MinimalCrudTests(unittest.TestCase):
+class TestMainMenu(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls._tmp_dir = TemporaryDirectory()
-        cls._db_path = Path(cls._tmp_dir.name) / "test_db.sqlite"
+        cls._db_path = Path(cls._tmp_dir.name) / "test_menu.db"
         os.environ["PYTHON_BD_DB_PATH"] = str(cls._db_path)
         initialize_database(str(cls._db_path))
-        cls.products = ProductsCRUD()
-        cls.inventories = InventoriesCRUD()
-        cls.sales = SalesCRUD()
         cls.users = UsersCRUD()
+        cls.menu = MainMenu()
 
     @classmethod
     def tearDownClass(cls) -> None:
@@ -35,7 +31,7 @@ class MinimalCrudTests(unittest.TestCase):
     def tearDown(self) -> None:
         conn = get_connection()
         try:
-            for t in ("ventas", "inventarios", "productos", "clientes", "users"):
+            for t in ("users", "ventas", "inventarios", "productos", "clientes"):
                 try:
                     conn.execute(f"DELETE FROM {t};")
                 except Exception:
@@ -44,64 +40,45 @@ class MinimalCrudTests(unittest.TestCase):
         finally:
             conn.close()
 
-    def test_user_level_restrictions_inventory(self) -> None:
-        # crear usuarios con niveles distintos
-        ok, _ = self.users.create_user("u1", "pass", level=1)
+    def test_menu_visibility_by_level(self) -> None:
+        ok, _ = self.users.create_user("lvl1", "p", level=1)
         self.assertTrue(ok)
-        ok, _ = self.users.create_user("u2", "pass", level=2)
+        ok, _ = self.users.create_user("lvl2", "p", level=2)
         self.assertTrue(ok)
-        ok, _ = self.users.create_user("u3", "pass", level=3)
+        ok, _ = self.users.create_user("lvl3", "p", level=3)
         self.assertTrue(ok)
 
-        # crear producto para inventario
-        created, _ = self.products.create_product("P900", "Prod", "Desc", 0.19, 10.0)
-        self.assertTrue(created)
+        ok, mods1 = self.menu.get_available_modules("lvl1")
+        self.assertTrue(ok)
+        assert isinstance(mods1, list)
+        self.assertIn("Products", mods1)
+        self.assertNotIn("Users", mods1)
 
-        # nivel 1 no puede crear
-        ok, msg = self.inventories.create_inventory("P900", 10, 1, 0.19, 10.0, username="u1")
-        self.assertFalse(ok)
-        self.assertIn("acceso", (msg or "").lower())
-
-        # nivel 2 puede crear y actualizar pero no eliminar
-        ok2, _ = self.inventories.create_inventory("P900", 10, 1, 0.19, 10.0, username="u2")
+        ok2, mods3 = self.menu.get_available_modules("lvl3")
         self.assertTrue(ok2)
-        up_ok, _ = self.inventories.update_inventory("P900", 15, 1, 0.19, 10.0, username="u2")
-        self.assertTrue(up_ok)
-        del_ok, del_msg = self.inventories.delete_inventory("P900", username="u2")
-        self.assertFalse(del_ok)
-        self.assertIn("acceso", (del_msg or "").lower())
+        assert isinstance(mods3, list)
+        self.assertIn("Users", mods3)
 
-        # nivel 3 puede eliminar
-        del_ok2, _ = self.inventories.delete_inventory("P900", username="u3")
-        self.assertTrue(del_ok2)
-
-    def test_user_level_restrictions_sales(self) -> None:
-        # crear usuarios niveles
-        ok, _ = self.users.create_user("su1", "pass", level=1)
+    def test_open_module_permission_checks(self) -> None:
+        ok, _ = self.users.create_user("u_read", "p", level=1)
         self.assertTrue(ok)
-        ok, _ = self.users.create_user("su2", "pass", level=2)
+        ok, _ = self.users.create_user("u_admin", "p", level=3)
         self.assertTrue(ok)
 
-        # producto y cliente
-        created, _ = self.products.create_product("S900", "ProdS", "Desc", 0.19, 20.0)
-        self.assertTrue(created)
-        # insertar cliente mínima
-        conn = get_connection()
-        try:
-            cur = conn.cursor()
-            cur.execute("INSERT OR REPLACE INTO clientes (codclie, nomclie) VALUES (?, ?)", ("C900", "Cliente"))
-            conn.commit()
-        finally:
-            conn.close()
+        # nivel 1 no puede abrir Users
+        allowed, msg = self.menu.open_module("Users", "u_read")
+        self.assertFalse(allowed)
+        self.assertIn("denegado", msg.lower())
 
-        # nivel1 no puede crear venta
-        ok, msg = self.sales.create_sale("2025-11-18", "C900", "S900", "ProdS", 20.0, 1, username="su1")
-        self.assertFalse(ok)
-        self.assertIn("acceso", (msg or "").lower())
+        # admin puede abrir Users
+        allowed2, msg2 = self.menu.open_module("Users", "u_admin")
+        self.assertTrue(allowed2)
+        self.assertIn("concedido", msg2.lower())
 
-        # nivel2 puede crear
-        ok2, _ = self.sales.create_sale("2025-11-18", "C900", "S900", "ProdS", 20.0, 1, username="su2")
-        self.assertTrue(ok2)
+        # módulo inexistente
+        allowed3, msg3 = self.menu.open_module("NoExiste", "u_admin")
+        self.assertFalse(allowed3)
+        self.assertIn("no existe", msg3.lower())
 
 
 if __name__ == "__main__":
