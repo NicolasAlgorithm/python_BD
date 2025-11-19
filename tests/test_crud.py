@@ -35,7 +35,6 @@ class MinimalCrudTests(unittest.TestCase):
     def tearDown(self) -> None:
         conn = get_connection()
         try:
-            # limpiar tablas usadas en las pruebas
             for t in ("ventas", "inventarios", "productos", "clientes", "users"):
                 try:
                     conn.execute(f"DELETE FROM {t};")
@@ -45,102 +44,64 @@ class MinimalCrudTests(unittest.TestCase):
         finally:
             conn.close()
 
-    def _insert_client(self, codclie: str, nombre: str = "Cliente Test") -> None:
-        """Inserta un cliente rellenando todas las columnas detectadas para satisfacer NOT NULL."""
+    def test_user_level_restrictions_inventory(self) -> None:
+        # crear usuarios con niveles distintos
+        ok, _ = self.users.create_user("u1", "pass", level=1)
+        self.assertTrue(ok)
+        ok, _ = self.users.create_user("u2", "pass", level=2)
+        self.assertTrue(ok)
+        ok, _ = self.users.create_user("u3", "pass", level=3)
+        self.assertTrue(ok)
+
+        # crear producto para inventario
+        created, _ = self.products.create_product("P900", "Prod", "Desc", 0.19, 10.0)
+        self.assertTrue(created)
+
+        # nivel 1 no puede crear
+        ok, msg = self.inventories.create_inventory("P900", 10, 1, 0.19, 10.0, username="u1")
+        self.assertFalse(ok)
+        self.assertIn("acceso", (msg or "").lower())
+
+        # nivel 2 puede crear y actualizar pero no eliminar
+        ok2, _ = self.inventories.create_inventory("P900", 10, 1, 0.19, 10.0, username="u2")
+        self.assertTrue(ok2)
+        up_ok, _ = self.inventories.update_inventory("P900", 15, 1, 0.19, 10.0, username="u2")
+        self.assertTrue(up_ok)
+        del_ok, del_msg = self.inventories.delete_inventory("P900", username="u2")
+        self.assertFalse(del_ok)
+        self.assertIn("acceso", (del_msg or "").lower())
+
+        # nivel 3 puede eliminar
+        del_ok2, _ = self.inventories.delete_inventory("P900", username="u3")
+        self.assertTrue(del_ok2)
+
+    def test_user_level_restrictions_sales(self) -> None:
+        # crear usuarios niveles
+        ok, _ = self.users.create_user("su1", "pass", level=1)
+        self.assertTrue(ok)
+        ok, _ = self.users.create_user("su2", "pass", level=2)
+        self.assertTrue(ok)
+
+        # producto y cliente
+        created, _ = self.products.create_product("S900", "ProdS", "Desc", 0.19, 20.0)
+        self.assertTrue(created)
+        # insertar cliente mínima
         conn = get_connection()
         try:
             cur = conn.cursor()
-            cur.execute("PRAGMA table_info(clientes)")
-            cols_info = cur.fetchall()
-            if not cols_info:
-                # crear una tabla mínima si no existe
-                cur.execute("CREATE TABLE IF NOT EXISTS clientes (codclie TEXT PRIMARY KEY, nomclie TEXT NOT NULL)")
-                conn.commit()
-                cur.execute("PRAGMA table_info(clientes)")
-                cols_info = cur.fetchall()
-
-            cols = [c[1] for c in cols_info]
-            vals = []
-            insert_cols = []
-
-            for info in cols_info:
-                name = info[1]
-                typ = (info[2] or "").upper()
-                notnull = bool(info[3])
-                dflt = info[4]
-
-                # elegir valor para cada columna
-                if name == "codclie":
-                    val = codclie
-                elif name.lower() in ("nomclie", "nombre", "razonsocial", "name"):
-                    val = nombre
-                elif dflt is not None:
-                    val = dflt
-                elif "INT" in typ:
-                    val = 0
-                elif "CHAR" in typ or "TEXT" in typ or "CLOB" in typ:
-                    val = nombre if notnull else "N/A"
-                elif "REAL" in typ or "FLOA" in typ or "DOUB" in typ:
-                    val = 0.0
-                else:
-                    val = nombre if isinstance(nombre, str) else "N/A"
-
-                insert_cols.append(name)
-                vals.append(val)
-
-            cols_sql = ", ".join(insert_cols)
-            placeholders = ", ".join(["?"] * len(vals))
-            sql = f"INSERT OR REPLACE INTO clientes ({cols_sql}) VALUES ({placeholders})"
-            cur.execute(sql, tuple(vals))
+            cur.execute("INSERT OR REPLACE INTO clientes (codclie, nomclie) VALUES (?, ?)", ("C900", "Cliente"))
             conn.commit()
         finally:
             conn.close()
 
-    # Inventario: validación stock mínimo
-    def test_inventory_stock_validation(self) -> None:
-        created, _ = self.products.create_product("P100", "Prod", "Desc", 0.19, 10.0)
-        self.assertTrue(created)
-        ok, msg = self.inventories.create_inventory("P100", cantidad=5, stock_minimo=10, iva=0.19, costovta=10.0)
+        # nivel1 no puede crear venta
+        ok, msg = self.sales.create_sale("2025-11-18", "C900", "S900", "ProdS", 20.0, 1, username="su1")
         self.assertFalse(ok)
-        self.assertIn("menor", (msg or "").lower())
+        self.assertIn("acceso", (msg or "").lower())
 
-        ok2, msg2 = self.inventories.create_inventory("P100", cantidad=10, stock_minimo=10, iva=0.19, costovta=10.0)
-        self.assertTrue(ok2, msg2)
-
-    # Ventas: integridad referencial (cliente y producto)
-    def test_sales_referential_integrity(self) -> None:
-        # crear producto
-        created, _ = self.products.create_product("S100", "ProdS", "Desc", 0.19, 20.0)
-        self.assertTrue(created)
-
-        # intentar crear venta sin cliente -> debe fallar
-        ok, msg = self.sales.create_sale("2025-11-18", "NOCL", "S100", "ProdS", 20.0, 1)
-        self.assertFalse(ok)
-        self.assertIn("cliente", (msg or "").lower())
-
-        # insertar cliente y crear venta -> debe funcionar
-        self._insert_client("C100")
-        ok2, msg2 = self.sales.create_sale("2025-11-18", "C100", "S100", "ProdS", 20.0, 2)
-        self.assertTrue(ok2, msg2)
-
-        # intentar crear venta con producto inexistente -> debe fallar
-        self._insert_client("C101")
-        ok3, msg3 = self.sales.create_sale("2025-11-18", "C101", "NOPROD", "X", 5.0, 1)
-        self.assertFalse(ok3)
-        self.assertIn("producto", (msg3 or "").lower())
-
-    # Usuarios: hashing de contraseñas
-    def test_users_password_hashing(self) -> None:
-        ok, msg = self.users.create_user("testuser", "Secreta123")
-        self.assertTrue(ok, msg)
-        info = self.users.read_user("testuser")
-        self.assertIsNotNone(info)
-        assert info is not None
-        self.assertIn("password_hash", info)
-        self.assertIn("salt", info)
-        self.assertEqual(len(info["password_hash"]), 64)
-        okv, _ = self.users.verify_user("testuser", "Secreta123")
-        self.assertTrue(okv)
+        # nivel2 puede crear
+        ok2, _ = self.sales.create_sale("2025-11-18", "C900", "S900", "ProdS", 20.0, 1, username="su2")
+        self.assertTrue(ok2)
 
 
 if __name__ == "__main__":

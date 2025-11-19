@@ -11,7 +11,7 @@ from DB.connection import get_connection
 
 
 class UsersCRUD:
-    """Operaciones CRUD básicas para usuarios con hashing de contraseñas."""
+    """Operaciones CRUD básicas para usuarios con hashing de contraseñas y nivel de acceso."""
 
     def __init__(self, connection_factory: Callable = get_connection) -> None:
         self._connection_factory = connection_factory
@@ -22,19 +22,20 @@ class UsersCRUD:
             CREATE TABLE IF NOT EXISTS users (
                 username TEXT PRIMARY KEY,
                 password_hash TEXT NOT NULL,
-                salt TEXT NOT NULL
+                salt TEXT NOT NULL,
+                level INTEGER NOT NULL DEFAULT 1
             )
             """
         )
 
     def _hash_password(self, password: str, salt: str) -> str:
-        """Hash de contraseña usando SHA256 sobre salt + password."""
         return hashlib.sha256((salt + password).encode("utf-8")).hexdigest()
 
-    def create_user(self, username: str, password: str) -> tuple[bool, str]:
-        """Crear usuario guardando salt y hash. Mensajes en español para tests."""
+    def create_user(self, username: str, password: str, level: int = 1) -> tuple[bool, str]:
         if not username or not password:
             return False, "Nombre de usuario y contraseña requeridos."
+        if level not in (1, 2, 3):
+            return False, "Nivel de usuario inválido."
         conn = self._connection_factory()
         try:
             cur = conn.cursor()
@@ -45,8 +46,8 @@ class UsersCRUD:
             salt = os.urandom(16).hex()
             pw_hash = self._hash_password(password, salt)
             cur.execute(
-                "INSERT INTO users (username, password_hash, salt) VALUES (?, ?, ?)",
-                (username, pw_hash, salt),
+                "INSERT INTO users (username, password_hash, salt, level) VALUES (?, ?, ?, ?)",
+                (username, pw_hash, salt, level),
             )
             conn.commit()
             return True, "Usuario creado."
@@ -54,13 +55,12 @@ class UsersCRUD:
             conn.close()
 
     def read_user(self, username: str) -> Optional[dict]:
-        """Leer usuario (incluye hash y salt)."""
         conn = self._connection_factory()
         try:
             cur = conn.cursor()
             self._ensure_table(cur)
             cur.execute(
-                "SELECT username, password_hash, salt FROM users WHERE username = ?",
+                "SELECT username, password_hash, salt, level FROM users WHERE username = ?",
                 (username,),
             )
             row = cur.fetchone()
@@ -72,7 +72,6 @@ class UsersCRUD:
             conn.close()
 
     def verify_user(self, username: str, password: str) -> tuple[bool, str]:
-        """Verificar contraseña: devuelve (True, msg) o (False, msg)."""
         conn = self._connection_factory()
         try:
             cur = conn.cursor()
@@ -90,3 +89,10 @@ class UsersCRUD:
             return False, "Contraseña incorrecta."
         finally:
             conn.close()
+
+    def get_user_level(self, username: str) -> Optional[int]:
+        """Devuelve el nivel del usuario (1,2,3) o None si no existe."""
+        u = self.read_user(username)
+        if u is None:
+            return None
+        return int(u.get("level", 1))
