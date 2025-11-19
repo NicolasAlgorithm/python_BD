@@ -60,15 +60,17 @@ class InventoriesCRUD:
             cursor.execute("SELECT 1 FROM inventarios WHERE codprod = ?", (codprod,))
             if cursor.fetchone():
                 return False, "Ya existe un registro de inventario para ese producto."
-            cursor.execute("SELECT 1 FROM productos WHERE codprod = ?", (codprod,))
-            if not cursor.fetchone():
+            cursor.execute("SELECT nomprod FROM productos WHERE codprod = ?", (codprod,))
+            product_row = cursor.fetchone()
+            if not product_row:
                 return False, "El producto asociado no existe."
+            nomprod = product_row[0]
             cursor.execute(
                 """
-                INSERT INTO inventarios (codprod, cantidad, stock_minimo, iva, costovta)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO inventarios (codprod, nomprod, cantidad, stock_minimo, iva, costovta)
+                VALUES (?, ?, ?, ?, ?, ?)
                 """,
-                (codprod, cantidad, stock_minimo, iva, costovta),
+                (codprod, nomprod, cantidad, stock_minimo, iva, costovta),
             )
             conn.commit()
             return True, "Inventario creado."
@@ -83,7 +85,7 @@ class InventoriesCRUD:
         try:
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT codprod, cantidad, stock_minimo, iva, costovta FROM inventarios WHERE codprod = ?",
+                "SELECT codprod, nomprod, cantidad, stock_minimo, iva, costovta FROM inventarios WHERE codprod = ?",
                 (codprod,),
             )
             row = cursor.fetchone()
@@ -116,16 +118,18 @@ class InventoriesCRUD:
             ok, msg = self._validate_values(cantidad, stock_minimo, costovta)
             if not ok:
                 return False, msg
-            cursor.execute("SELECT 1 FROM productos WHERE codprod = ?", (codprod,))
-            if not cursor.fetchone():
+            cursor.execute("SELECT nomprod FROM productos WHERE codprod = ?", (codprod,))
+            product_row = cursor.fetchone()
+            if not product_row:
                 return False, "El producto asociado no existe."
+            nomprod = product_row[0]
             cursor.execute(
                 """
                 UPDATE inventarios
-                SET cantidad = ?, stock_minimo = ?, iva = ?, costovta = ?
+                SET nomprod = ?, cantidad = ?, stock_minimo = ?, iva = ?, costovta = ?
                 WHERE codprod = ?
                 """,
-                (cantidad, stock_minimo, iva, costovta, codprod),
+                (nomprod, cantidad, stock_minimo, iva, costovta, codprod),
             )
             conn.commit()
             return True, "Inventario actualizado."
