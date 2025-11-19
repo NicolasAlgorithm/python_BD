@@ -1,4 +1,4 @@
-"""CRUD y validaciones para la tabla inventarios."""
+"""CRUD y validaciones para la tabla ventas."""
 
 from __future__ import annotations
 
@@ -7,60 +7,74 @@ from typing import Callable, Optional
 from DB.connection import get_connection
 
 
-class InventoriesCRUD:
-    """Operaciones CRUD sobre la tabla inventarios con validación de stock mínimo."""
+class SalesCRUD:
+    """CRUD para la tabla ventas con validaciones de integridad referencial."""
 
     def __init__(self, connection_factory: Callable = get_connection) -> None:
         self._connection_factory = connection_factory
 
-    def create_inventory(
+    def create_sale(
         self,
+        fecha: str,
+        codclie: str,
         codprod: str,
-        cantidad: int,
-        stock_minimo: int,
-        iva: float,
+        nomprod: str,
         costovta: float,
+        canti: int,
+        vriva: float = 0.0,
+        subtotal: Optional[float] = None,
+        vrtotal: Optional[float] = None,
     ) -> tuple[bool, str]:
-        """Crear registro de inventario validando stock mínimo y existencia del producto."""
+        """
+        Inserta una venta validando que exista el cliente y el producto.
+        Además valida valores básicos (precio >= 0, cantidad > 0).
+        """
         conn = self._connection_factory()
         try:
             cursor = conn.cursor()
 
-            if cantidad < 0 or stock_minimo < 0:
-                return False, "Cantidad y stock mínimo deben ser valores no negativos."
+            # Validaciones básicas de valores
             if costovta < 0:
                 return False, "El precio de venta no puede ser negativo."
-            if cantidad < stock_minimo:
-                return False, "La cantidad disponible no puede ser menor que el stock mínimo."
+            if canti <= 0:
+                return False, "La cantidad debe ser mayor que cero."
 
-            cursor.execute("SELECT 1 FROM inventarios WHERE codprod = ?", (codprod,))
-            if cursor.fetchone():
-                return False, "Ya existe un registro de inventario para ese producto."
+            # Validar existencia del cliente
+            cursor.execute("SELECT 1 FROM clientes WHERE codclie = ?", (codclie,))
+            if not cursor.fetchone():
+                return False, "El cliente asociado no existe."
 
+            # Validar existencia del producto
             cursor.execute("SELECT 1 FROM productos WHERE codprod = ?", (codprod,))
             if not cursor.fetchone():
                 return False, "El producto asociado no existe."
 
+            # Calcular subtotal / total si no se proporcionan
+            if subtotal is None:
+                subtotal = round(costovta * canti, 2)
+            if vrtotal is None:
+                vrtotal = round(subtotal + vriva, 2)
+
             cursor.execute(
                 """
-                INSERT INTO inventarios (codprod, cantidad, stock_minimo, iva, costovta)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO ventas (fecha, codclie, codprod, nomprod, costovta, canti, vriva, subtotal, vrtotal)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (codprod, cantidad, stock_minimo, iva, costovta),
+                (fecha, codclie, codprod, nomprod, costovta, canti, vriva, subtotal, vrtotal),
             )
             conn.commit()
-            return True, "Inventario creado."
+            return True, "Venta registrada correctamente."
         finally:
             conn.close()
 
-    def read_inventory(self, codprod: str) -> Optional[dict]:
-        """Leer inventario por producto, devuelve dict o None."""
+    def read_sale(self, sale_id: int) -> Optional[dict]:
+        """Leer venta por id, devolver dict o None."""
         conn = self._connection_factory()
         try:
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT codprod, cantidad, stock_minimo, iva, costovta FROM inventarios WHERE codprod = ?",
-                (codprod,),
+                "SELECT id, fecha, codclie, codprod, nomprod, costovta, canti, vriva, subtotal, vrtotal FROM ventas WHERE id = ?",
+                (sale_id,),
             )
             row = cursor.fetchone()
             if row is None:
@@ -70,57 +84,77 @@ class InventoriesCRUD:
         finally:
             conn.close()
 
-    def update_inventory(
+    def update_sale(
         self,
+        sale_id: int,
+        fecha: str,
+        codclie: str,
         codprod: str,
-        cantidad: int,
-        stock_minimo: int,
-        iva: float,
+        nomprod: str,
         costovta: float,
+        canti: int,
+        vriva: float = 0.0,
+        subtotal: Optional[float] = None,
+        vrtotal: Optional[float] = None,
     ) -> tuple[bool, str]:
-        """Actualizar inventario validando stock mínimo y existencia del registro/producto."""
+        """
+        Actualiza una venta validando integridad referencial y valores.
+        """
         conn = self._connection_factory()
         try:
             cursor = conn.cursor()
-            cursor.execute("SELECT 1 FROM inventarios WHERE codprod = ?", (codprod,))
-            if not cursor.fetchone():
-                return False, "Registro de inventario no existe."
 
-            if cantidad < 0 or stock_minimo < 0:
-                return False, "Cantidad y stock mínimo deben ser valores no negativos."
+            # Comprobar que la venta exista
+            cursor.execute("SELECT 1 FROM ventas WHERE id = ?", (sale_id,))
+            if not cursor.fetchone():
+                return False, "Registro de venta no existe."
+
+            # Validaciones de valores
             if costovta < 0:
                 return False, "El precio de venta no puede ser negativo."
-            if cantidad < stock_minimo:
-                return False, "La cantidad disponible no puede ser menor que el stock mínimo."
+            if canti <= 0:
+                return False, "La cantidad debe ser mayor que cero."
 
+            # Validar existencia del cliente
+            cursor.execute("SELECT 1 FROM clientes WHERE codclie = ?", (codclie,))
+            if not cursor.fetchone():
+                return False, "El cliente asociado no existe."
+
+            # Validar existencia del producto
             cursor.execute("SELECT 1 FROM productos WHERE codprod = ?", (codprod,))
             if not cursor.fetchone():
                 return False, "El producto asociado no existe."
 
+            # Calcular subtotal / total si no se proporcionan
+            if subtotal is None:
+                subtotal = round(costovta * canti, 2)
+            if vrtotal is None:
+                vrtotal = round(subtotal + vriva, 2)
+
             cursor.execute(
                 """
-                UPDATE inventarios
-                SET cantidad = ?, stock_minimo = ?, iva = ?, costovta = ?
-                WHERE codprod = ?
+                UPDATE ventas
+                SET fecha = ?, codclie = ?, codprod = ?, nomprod = ?, costovta = ?, canti = ?, vriva = ?, subtotal = ?, vrtotal = ?
+                WHERE id = ?
                 """,
-                (cantidad, stock_minimo, iva, costovta, codprod),
+                (fecha, codclie, codprod, nomprod, costovta, canti, vriva, subtotal, vrtotal, sale_id),
             )
             conn.commit()
-            return True, "Inventario actualizado."
+            return True, "Venta actualizada correctamente."
         finally:
             conn.close()
 
-    def delete_inventory(self, codprod: str) -> tuple[bool, str]:
-        """Eliminar registro de inventario si existe."""
+    def delete_sale(self, sale_id: int) -> tuple[bool, str]:
+        """Eliminar una venta si existe."""
         conn = self._connection_factory()
         try:
             cursor = conn.cursor()
-            cursor.execute("SELECT 1 FROM inventarios WHERE codprod = ?", (codprod,))
+            cursor.execute("SELECT 1 FROM ventas WHERE id = ?", (sale_id,))
             if not cursor.fetchone():
-                return False, "Registro de inventario no existe."
+                return False, "Registro de venta no existe."
 
-            cursor.execute("DELETE FROM inventarios WHERE codprod = ?", (codprod,))
+            cursor.execute("DELETE FROM ventas WHERE id = ?", (sale_id,))
             conn.commit()
-            return True, "Inventario eliminado."
+            return True, "Venta eliminada."
         finally:
             conn.close()
