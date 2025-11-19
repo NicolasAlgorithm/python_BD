@@ -120,6 +120,7 @@ class InventoryWindow:
 
     def update_inventory(self) -> None:
         if "update" not in self.actions:
+            messagebox.showerror("Inventarios", "No tiene permiso para actualizar (nivel insuficiente).")
             return
         codprod, cantidad, stock_minimo, iva, costovta = self._get_form()
         if not codprod:
@@ -141,6 +142,7 @@ class InventoryWindow:
 
     def delete_inventory(self) -> None:
         if "delete" not in self.actions:
+            messagebox.showerror("Inventarios", "No tiene permiso para eliminar (nivel insuficiente).")
             return
         codprod = self.entry_code.get().strip()
         if not codprod:

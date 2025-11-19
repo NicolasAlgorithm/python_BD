@@ -154,6 +154,7 @@ class SalesWindow:
 
     def create_sale(self) -> None:
         if "create" not in self.actions:
+            messagebox.showerror("Ventas", "No tiene permiso para crear (nivel insuficiente).")
             return
         data = self._get_form()
         required = [data["fecha"], data["codclie"], data["codprod"], data["nomprod"]]
@@ -178,6 +179,7 @@ class SalesWindow:
 
     def update_sale(self) -> None:
         if "update" not in self.actions:
+            messagebox.showerror("Ventas", "No tiene permiso para actualizar (nivel insuficiente).")
             return
         data = self._get_form()
         if not data["sale_id"]:
@@ -202,6 +204,7 @@ class SalesWindow:
 
     def delete_sale(self) -> None:
         if "delete" not in self.actions:
+            messagebox.showerror("Ventas", "No tiene permiso para eliminar (nivel insuficiente).")
             return
         sale_id = self.entry_id.get().strip()
         if not sale_id:

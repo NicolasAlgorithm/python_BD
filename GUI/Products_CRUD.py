@@ -109,6 +109,7 @@ class ProductsWindow:
 
     def update_product(self) -> None:
         if "update" not in self.actions:
+            messagebox.showerror("Productos", "No tiene permiso para actualizar (nivel insuficiente).")
             return
         codprod, nomprod, descripcion, iva, costovta = self._get_form()
         if not codprod:
@@ -129,6 +130,7 @@ class ProductsWindow:
 
     def delete_product(self) -> None:
         if "delete" not in self.actions:
+            messagebox.showerror("Productos", "No tiene permiso para eliminar (nivel insuficiente).")
             return
         codprod = self.entry_code.get().strip()
         if not codprod:

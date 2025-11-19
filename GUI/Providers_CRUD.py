@@ -113,6 +113,7 @@ class ProvidersWindow:
 
     def update_provider(self) -> None:
         if "update" not in self.actions:
+            messagebox.showerror("Proveedores", "No tiene permiso para actualizar (nivel insuficiente).")
             return
         idprov, codprod, descripcion, costo, direccion, telefono = self._get_form()
         if not idprov:
@@ -132,6 +133,7 @@ class ProvidersWindow:
 
     def delete_provider(self) -> None:
         if "delete" not in self.actions:
+            messagebox.showerror("Proveedores", "No tiene permiso para eliminar (nivel insuficiente).")
             return
         idprov = self.entry_id.get().strip()
         if not idprov:

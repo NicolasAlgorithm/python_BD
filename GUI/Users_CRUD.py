@@ -86,6 +86,7 @@ class UsersWindow:
 
     def update_user(self) -> None:
         if "update" not in self.actions:
+            messagebox.showerror("Usuarios", "No tiene permiso para actualizar (nivel insuficiente).")
             return
         username, password, level = self._get_form_data()
         if not username:
@@ -102,6 +103,7 @@ class UsersWindow:
 
     def delete_user(self) -> None:
         if "delete" not in self.actions:
+            messagebox.showerror("Usuarios", "No tiene permiso para eliminar (nivel insuficiente).")
             return
         username = self.entry_username.get().strip()
         if not username:
