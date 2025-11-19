@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable, Optional
+from typing import Any, Callable, List, Optional
 
 from DB.connection import get_connection
 import sqlite3
@@ -168,6 +168,90 @@ class SalesCRUD:
             cur.execute(
                 "SELECT id, fecha, codclie, codprod, nomprod, costovta, canti, vriva, subtotal, vrtotal FROM ventas ORDER BY id"
             )
+            rows = cur.fetchall()
+            columns = [desc[0] for desc in cur.description]
+            return [dict(zip(columns, row)) for row in rows]
+        finally:
+            conn.close()
+
+    def list_sales_by_date_range(
+        self,
+        start_date: str,
+        end_date: str,
+        username: Optional[str] = None,
+    ) -> List[dict[str, Any]]:
+        ok, msg = self._authorize(username, 1)
+        if not ok:
+            return []
+        conn = self._connection_factory()
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                """
+                SELECT id, fecha, codclie, codprod, nomprod, costovta, canti, vriva, subtotal, vrtotal
+                FROM ventas
+                WHERE date(fecha) BETWEEN date(?) AND date(?)
+                ORDER BY fecha, id
+                """,
+                (start_date, end_date),
+            )
+            rows = cur.fetchall()
+            columns = [desc[0] for desc in cur.description]
+            return [dict(zip(columns, row)) for row in rows]
+        finally:
+            conn.close()
+
+    def summarize_sales(
+        self,
+        period: str,
+        username: Optional[str] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+    ) -> List[dict[str, Any]]:
+        ok, msg = self._authorize(username, 1)
+        if not ok:
+            return []
+        period = period.lower()
+        period_map = {
+            "day": "%Y-%m-%d",
+            "week": "%Y-%W",
+            "month": "%Y-%m",
+            "year": "%Y",
+        }
+        if period not in period_map:
+            return []
+        bucket_format = period_map[period]
+        where_clauses = []
+        params: List[Any] = []
+        if start_date:
+            where_clauses.append("date(fecha) >= date(?)")
+            params.append(start_date)
+        if end_date:
+            where_clauses.append("date(fecha) <= date(?)")
+            params.append(end_date)
+        where_sql = ""
+        if where_clauses:
+            where_sql = "WHERE " + " AND ".join(where_clauses)
+        query = f"""
+            SELECT
+                strftime('{bucket_format}', fecha) AS periodo,
+                COUNT(*) AS transacciones,
+                ROUND(SUM(vrtotal), 2) AS total_ventas,
+                ROUND(SUM(vriva), 2) AS total_iva,
+                COUNT(DISTINCT codclie) AS clientes_unicos,
+                CASE
+                    WHEN COUNT(DISTINCT codclie) = 0 THEN 0
+                    ELSE ROUND(SUM(vrtotal) / COUNT(DISTINCT codclie), 2)
+                END AS promedio_por_cliente
+            FROM ventas
+            {where_sql}
+            GROUP BY periodo
+            ORDER BY periodo
+        """
+        conn = self._connection_factory()
+        try:
+            cur = conn.cursor()
+            cur.execute(query, params)
             rows = cur.fetchall()
             columns = [desc[0] for desc in cur.description]
             return [dict(zip(columns, row)) for row in rows]

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Callable, Optional, Tuple
+from typing import Callable, List, Optional, Tuple
 
 from DB.connection import get_connection
 import sqlite3
@@ -149,6 +149,22 @@ class InventoriesCRUD:
             cursor.execute("DELETE FROM inventarios WHERE codprod = ?", (codprod,))
             conn.commit()
             return True, "Inventario eliminado."
+        finally:
+            conn.close()
+
+    def list_inventories(self, username: Optional[str] = None) -> List[dict]:
+        ok, msg = self._authorize(username, 1)
+        if not ok:
+            return []
+        conn = self._connection_factory()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT codprod, nomprod, cantidad, stock_minimo, iva, costovta FROM inventarios ORDER BY codprod"
+            )
+            rows = cursor.fetchall()
+            columns = [desc[0] for desc in cursor.description]
+            return [dict(zip(columns, row)) for row in rows]
         finally:
             conn.close()
 

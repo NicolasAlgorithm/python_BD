@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Callable, Optional
+from typing import Callable, List, Optional
 
 from DB.connection import get_connection
 
@@ -113,5 +113,19 @@ class ProvidersCRUD:
             cursor.execute("DELETE FROM proveedores WHERE idprov = ?", (idprov,))
             conn.commit()
             return True, "Proveedor eliminado."
+        finally:
+            conn.close()
+
+    def list_providers(self) -> List[dict]:
+        """Return all providers ordered by identifier."""
+        conn = self._connection_factory()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT idprov, codprod, descripcion, costo, direccion, telefono FROM proveedores ORDER BY idprov"
+            )
+            rows = cursor.fetchall()
+            columns = [desc[0] for desc in cursor.description]
+            return [dict(zip(columns, row)) for row in rows]
         finally:
             conn.close()
