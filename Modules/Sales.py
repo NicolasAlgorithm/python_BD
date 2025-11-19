@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any, Callable, Optional
 
 from DB.connection import get_connection
+import sqlite3
 
 
 class SalesCRUD:
@@ -172,3 +173,38 @@ class SalesCRUD:
             return [dict(zip(columns, row)) for row in rows]
         finally:
             conn.close()
+
+
+def get_sales_with_customers_products(db_path="db/app.db"):
+    """
+    Devuelve las ventas junto con los datos del cliente y los productos vendidos.
+    Retorna una lista de diccionarios con campos: sale_id, sale_date, sale_total,
+    customer_id, customer_name, product_id, product_name, quantity, unit_price.
+    """
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+
+    sql = """
+    SELECT
+        s.id AS sale_id,
+        s.date AS sale_date,
+        s.total AS sale_total,
+        c.id AS customer_id,
+        COALESCE(c.name, c.nomcli, '') AS customer_name,
+        p.id AS product_id,
+        COALESCE(p.name, p.nombre, '') AS product_name,
+        sd.quantity AS quantity,
+        sd.price AS unit_price
+    FROM Sales s
+    LEFT JOIN Custumers c ON s.customer_id = c.id OR s.customer_id = c.nomcli
+    LEFT JOIN SalesDetails sd ON sd.sale_id = s.id
+    LEFT JOIN Products p ON sd.product_id = p.id
+    ORDER BY s.date DESC, s.id
+    """
+
+    try:
+        rows = cursor.execute(sql).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
