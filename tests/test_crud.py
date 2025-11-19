@@ -9,6 +9,7 @@ from tempfile import TemporaryDirectory
 
 from DB.connection import get_connection
 from DB.init_db import initialize_database
+from Modules.Inventarios import InventoriesCRUD
 from Modules.Products import ProductsCRUD
 from Modules.Inventarios import InventoriesCRUD
 from Modules.Sales import SalesCRUD
@@ -23,9 +24,8 @@ class MinimalCrudTests(unittest.TestCase):
         os.environ["PYTHON_BD_DB_PATH"] = str(cls._db_path)
         initialize_database(str(cls._db_path))
         cls.products = ProductsCRUD()
+        cls.providers = ProvidersCRUD()
         cls.inventories = InventoriesCRUD()
-        cls.sales = SalesCRUD()
-        cls.users = UsersCRUD()
 
     @classmethod
     def tearDownClass(cls) -> None:
@@ -35,63 +35,10 @@ class MinimalCrudTests(unittest.TestCase):
     def tearDown(self) -> None:
         conn = get_connection()
         try:
-            # limpiar tablas usadas en las pruebas
-            for t in ("ventas", "inventarios", "productos", "clientes", "users"):
-                try:
-                    conn.execute(f"DELETE FROM {t};")
-                except Exception:
-                    pass
-            conn.commit()
-        finally:
-            conn.close()
-
-    def _insert_client(self, codclie: str, nombre: str = "Cliente Test") -> None:
-        """Inserta un cliente rellenando todas las columnas detectadas para satisfacer NOT NULL."""
-        conn = get_connection()
-        try:
-            cur = conn.cursor()
-            cur.execute("PRAGMA table_info(clientes)")
-            cols_info = cur.fetchall()
-            if not cols_info:
-                # crear una tabla mínima si no existe
-                cur.execute("CREATE TABLE IF NOT EXISTS clientes (codclie TEXT PRIMARY KEY, nomclie TEXT NOT NULL)")
-                conn.commit()
-                cur.execute("PRAGMA table_info(clientes)")
-                cols_info = cur.fetchall()
-
-            cols = [c[1] for c in cols_info]
-            vals = []
-            insert_cols = []
-
-            for info in cols_info:
-                name = info[1]
-                typ = (info[2] or "").upper()
-                notnull = bool(info[3])
-                dflt = info[4]
-
-                # elegir valor para cada columna
-                if name == "codclie":
-                    val = codclie
-                elif name.lower() in ("nomclie", "nombre", "razonsocial", "name"):
-                    val = nombre
-                elif dflt is not None:
-                    val = dflt
-                elif "INT" in typ:
-                    val = 0
-                elif "CHAR" in typ or "TEXT" in typ or "CLOB" in typ:
-                    val = nombre if notnull else "N/A"
-                elif "REAL" in typ or "FLOA" in typ or "DOUB" in typ:
-                    val = 0.0
-                else:
-                    val = nombre if isinstance(nombre, str) else "N/A"
-
-                insert_cols.append(name)
-                vals.append(val)
-
-            cols_sql = ", ".join(insert_cols)
-            placeholders = ", ".join(["?"] * len(vals))
-            sql = f"INSERT OR REPLACE INTO clientes ({cols_sql}) VALUES ({placeholders})"
-            cur.execute(sql, tuple(vals))
+            # Keep FK checks happy by clearing child tables first.
+            conn.execute("DELETE FROM inventarios;")
+            conn.execute("DELETE FROM proveedores;")
+            conn.execute("DELETE FROM productos;")
             conn.commit()
         finally:
             conn.close()
@@ -141,6 +88,67 @@ class MinimalCrudTests(unittest.TestCase):
         self.assertEqual(len(info["password_hash"]), 64)
         okv, _ = self.users.verify_user("testuser", "Secreta123")
         self.assertTrue(okv)
+
+    def test_inventory_crud_flow(self) -> None:
+        self.products.create_product(
+            "INV-1", "UPS", "Respaldo de energia", 0.19, 450.0
+        )
+
+        created, message = self.inventories.create_inventory(
+            "INV-1", cantidad=20, stock_minimo=5, iva=0.19, costovta=480.0
+        )
+        self.assertTrue(created, message)
+
+        inventory = self.inventories.read_inventory("INV-1")
+        self.assertIsNotNone(inventory)
+        assert inventory is not None
+        self.assertEqual(inventory["cantidad"], 20)
+
+        updated, update_message = self.inventories.update_inventory(
+            "INV-1", cantidad=15, stock_minimo=4, iva=0.19, costovta=490.0
+        )
+        self.assertTrue(updated, update_message)
+
+        inventory = self.inventories.read_inventory("INV-1")
+        self.assertIsNotNone(inventory)
+        assert inventory is not None
+        self.assertEqual(inventory["cantidad"], 15)
+
+        deleted, delete_message = self.inventories.delete_inventory("INV-1")
+        self.assertTrue(deleted, delete_message)
+        self.assertIsNone(self.inventories.read_inventory("INV-1"))
+
+    def test_inventory_requires_existing_product(self) -> None:
+        created, message = self.inventories.create_inventory(
+            "INV-404", cantidad=5, stock_minimo=1, iva=0.19, costovta=100.0
+        )
+        self.assertFalse(created)
+        self.assertIn("no existe", message.lower())
+
+    def test_prevent_duplicate_inventory(self) -> None:
+        self.products.create_product(
+            "INV-2", "Router", "Router de 4 antenas", 0.19, 210.0
+        )
+        first_created, first_message = self.inventories.create_inventory(
+            "INV-2", cantidad=10, stock_minimo=2, iva=0.19, costovta=220.0
+        )
+        self.assertTrue(first_created, first_message)
+
+        duplicated, duplicate_message = self.inventories.create_inventory(
+            "INV-2", cantidad=12, stock_minimo=2, iva=0.19, costovta=220.0
+        )
+        self.assertFalse(duplicated)
+        self.assertIn("ya existe", duplicate_message.lower())
+
+    def test_inventory_quantity_cannot_be_below_stock(self) -> None:
+        self.products.create_product(
+            "INV-3", "Cable HDMI", "Cable 4k", 0.19, 30.0
+        )
+        created, message = self.inventories.create_inventory(
+            "INV-3", cantidad=1, stock_minimo=5, iva=0.19, costovta=35.0
+        )
+        self.assertFalse(created)
+        self.assertIn("no puede ser menor", message.lower())
 
 
 if __name__ == "__main__":
