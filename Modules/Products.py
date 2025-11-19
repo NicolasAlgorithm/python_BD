@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Callable, Optional
+from typing import Callable, List, Optional
 
 from DB.connection import get_connection
 import sqlite3
@@ -126,5 +126,19 @@ class ProductsCRUD:
             cursor.execute("DELETE FROM productos WHERE codprod = ?", (codprod,))
             conn.commit()
             return True, "Producto eliminado."
+        finally:
+            conn.close()
+
+    def list_products(self) -> List[dict]:
+        """Return all products ordered by identifier."""
+        conn = self._connection_factory()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT codprod, nomprod, descripcion, iva, costovta FROM productos ORDER BY codprod"
+            )
+            rows = cursor.fetchall()
+            columns = [desc[0] for desc in cursor.description]
+            return [dict(zip(columns, row)) for row in rows]
         finally:
             conn.close()

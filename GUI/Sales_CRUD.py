@@ -1,103 +1,237 @@
-from tkinter import Tk, Frame, Label, Entry, Button, Listbox, END, Scrollbar, messagebox
-from Modules.Sales import Sales  # Assuming Sales.py contains the necessary functions for CRUD operations
+"""Sales window bound to the Sales CRUD service with permissions."""
 
-class SalesCRUD:
-    def __init__(self, master):
+from __future__ import annotations
+
+import tkinter as tk
+from tkinter import END, Frame, Label, Listbox, Scrollbar, Toplevel, messagebox
+
+from GUI.permissions import allowed_actions
+from Modules.Sales import SalesCRUD
+
+
+class SalesWindow:
+    """CRUD window for ventas table, aware of user capabilities."""
+
+    def __init__(self, master: Toplevel, username: str, level: int, actions: list[str]) -> None:
         self.master = master
-        self.master.title("Sales Management")
-        self.frame = Frame(self.master)
-        self.frame.pack(padx=10, pady=10)
+        self.username = username
+        self.level = level
+        self.actions = actions
+        self.service = SalesCRUD()
 
-        self.label_id = Label(self.frame, text="Sale ID:")
-        self.label_id.grid(row=0, column=0)
-        self.entry_id = Entry(self.frame)
-        self.entry_id.grid(row=0, column=1)
+        self.master.title("Ventas")
 
-        self.label_product = Label(self.frame, text="Product:")
-        self.label_product.grid(row=1, column=0)
-        self.entry_product = Entry(self.frame)
-        self.entry_product.grid(row=1, column=1)
+        frame = Frame(master)
+        frame.pack(padx=12, pady=12, fill="both", expand=True)
 
-        self.label_quantity = Label(self.frame, text="Quantity:")
-        self.label_quantity.grid(row=2, column=0)
-        self.entry_quantity = Entry(self.frame)
-        self.entry_quantity.grid(row=2, column=1)
+        Label(frame, text="ID venta").grid(row=0, column=0, sticky="w")
+        self.entry_id = tk.Entry(frame)
+        self.entry_id.grid(row=0, column=1, sticky="ew")
 
-        self.label_price = Label(self.frame, text="Price:")
-        self.label_price.grid(row=3, column=0)
-        self.entry_price = Entry(self.frame)
-        self.entry_price.grid(row=3, column=1)
+        Label(frame, text="Fecha (YYYY-MM-DD)").grid(row=1, column=0, sticky="w")
+        self.entry_date = tk.Entry(frame)
+        self.entry_date.grid(row=1, column=1, sticky="ew")
 
-        self.button_create = Button(self.frame, text="Create", command=self.create_sale)
-        self.button_create.grid(row=4, column=0, pady=5)
+        Label(frame, text="Cliente").grid(row=2, column=0, sticky="w")
+        self.entry_client = tk.Entry(frame)
+        self.entry_client.grid(row=2, column=1, sticky="ew")
 
-        self.button_read = Button(self.frame, text="Read", command=self.read_sales)
-        self.button_read.grid(row=4, column=1, pady=5)
+        Label(frame, text="Producto").grid(row=3, column=0, sticky="w")
+        self.entry_product = tk.Entry(frame)
+        self.entry_product.grid(row=3, column=1, sticky="ew")
 
-        self.button_update = Button(self.frame, text="Update", command=self.update_sale)
-        self.button_update.grid(row=5, column=0, pady=5)
+        Label(frame, text="Nombre producto").grid(row=4, column=0, sticky="w")
+        self.entry_name = tk.Entry(frame)
+        self.entry_name.grid(row=4, column=1, sticky="ew")
 
-        self.button_delete = Button(self.frame, text="Delete", command=self.delete_sale)
-        self.button_delete.grid(row=5, column=1, pady=5)
+        Label(frame, text="Precio").grid(row=5, column=0, sticky="w")
+        self.entry_price = tk.Entry(frame)
+        self.entry_price.grid(row=5, column=1, sticky="ew")
 
-        self.listbox = Listbox(self.frame, width=50)
-        self.listbox.grid(row=6, column=0, columnspan=2)
+        Label(frame, text="Cantidad").grid(row=6, column=0, sticky="w")
+        self.entry_quantity = tk.Entry(frame)
+        self.entry_quantity.grid(row=6, column=1, sticky="ew")
 
-        self.scrollbar = Scrollbar(self.frame)
-        self.scrollbar.grid(row=6, column=2, sticky='ns')
-        self.listbox.config(yscrollcommand=self.scrollbar.set)
-        self.scrollbar.config(command=self.listbox.yview)
+        Label(frame, text="IVA").grid(row=7, column=0, sticky="w")
+        self.entry_iva = tk.Entry(frame)
+        self.entry_iva.grid(row=7, column=1, sticky="ew")
 
-        self.load_sales()
+        buttons = Frame(frame)
+        buttons.grid(row=8, column=0, columnspan=2, pady=8)
 
-    def create_sale(self):
-        sale_id = self.entry_id.get()
-        product = self.entry_product.get()
-        quantity = self.entry_quantity.get()
-        price = self.entry_price.get()
-        if Sales.create_sale(sale_id, product, quantity, price):
-            messagebox.showinfo("Success", "Sale created successfully!")
-            self.load_sales()
-        else:
-            messagebox.showerror("Error", "Failed to create sale.")
+        self.btn_create = tk.Button(buttons, text="Crear", command=self.create_sale)
+        self.btn_create.grid(row=0, column=0, padx=4)
+        self.btn_update = tk.Button(buttons, text="Actualizar", command=self.update_sale)
+        self.btn_update.grid(row=0, column=1, padx=4)
+        self.btn_delete = tk.Button(buttons, text="Eliminar", command=self.delete_sale)
+        self.btn_delete.grid(row=0, column=2, padx=4)
+        tk.Button(buttons, text="Limpiar", command=self.clear_form).grid(row=0, column=3, padx=4)
 
-    def read_sales(self):
-        self.load_sales()
+        Label(frame, text="Ventas registradas").grid(row=9, column=0, columnspan=2, sticky="w", pady=(10, 0))
+        list_frame = Frame(frame)
+        list_frame.grid(row=10, column=0, columnspan=2, sticky="nsew")
 
-    def update_sale(self):
-        selected_sale = self.listbox.curselection()
-        if selected_sale:
-            sale_id = self.entry_id.get()
-            product = self.entry_product.get()
-            quantity = self.entry_quantity.get()
-            price = self.entry_price.get()
-            if Sales.update_sale(sale_id, product, quantity, price):
-                messagebox.showinfo("Success", "Sale updated successfully!")
-                self.load_sales()
-            else:
-                messagebox.showerror("Error", "Failed to update sale.")
-        else:
-            messagebox.showwarning("Warning", "Select a sale to update.")
+        self.listbox = Listbox(list_frame, width=70, height=10)
+        self.listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        self.listbox.bind("<<ListboxSelect>>", self.load_selection)
 
-    def delete_sale(self):
-        selected_sale = self.listbox.curselection()
-        if selected_sale:
-            sale_id = self.listbox.get(selected_sale).split()[0]  # Assuming the first part is the sale ID
-            if Sales.delete_sale(sale_id):
-                messagebox.showinfo("Success", "Sale deleted successfully!")
-                self.load_sales()
-            else:
-                messagebox.showerror("Error", "Failed to delete sale.")
-        else:
-            messagebox.showwarning("Warning", "Select a sale to delete.")
+        scrollbar = Scrollbar(list_frame, orient=tk.VERTICAL, command=self.listbox.yview)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.listbox.config(yscrollcommand=scrollbar.set)
 
-    def load_sales(self):
+        frame.columnconfigure(1, weight=1)
+        frame.rowconfigure(10, weight=1)
+
+        self._apply_permissions()
+        self.refresh_list()
+
+    def _apply_permissions(self) -> None:
+        if "create" not in self.actions:
+            self.btn_create.config(state=tk.DISABLED)
+        if "update" not in self.actions:
+            self.btn_update.config(state=tk.DISABLED)
+        if "delete" not in self.actions:
+            self.btn_delete.config(state=tk.DISABLED)
+
+    def refresh_list(self) -> None:
         self.listbox.delete(0, END)
-        sales_list = Sales.get_all_sales()
-        for sale in sales_list:
-            self.listbox.insert(END, f"{sale['id']} - {sale['product']} - {sale['quantity']} - {sale['price']}")
+        for sale in self.service.list_sales(self.username):
+            row = (
+                f"{sale['id']} | {sale['fecha']} | Cliente: {sale['codclie']} | "
+                f"Prod: {sale['codprod']} | Cant: {sale['canti']} | Total: {sale['vrtotal']}"
+            )
+            self.listbox.insert(END, row)
 
-if __name__ == "__main__":
-    root = Tk()
-    sales_crud = SalesCRUD(root)
-    root.mainloop()
+    def _parse_float(self, value: str) -> float:
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return 0.0
+
+    def _parse_int(self, value: str) -> int:
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return 0
+
+    def _get_form(self):
+        return {
+            "sale_id": self.entry_id.get().strip(),
+            "fecha": self.entry_date.get().strip(),
+            "codclie": self.entry_client.get().strip(),
+            "codprod": self.entry_product.get().strip(),
+            "nomprod": self.entry_name.get().strip(),
+            "costovta": self._parse_float(self.entry_price.get()),
+            "canti": self._parse_int(self.entry_quantity.get()),
+            "vriva": self._parse_float(self.entry_iva.get()),
+        }
+
+    def create_sale(self) -> None:
+        if "create" not in self.actions:
+            return
+        data = self._get_form()
+        required = [data["fecha"], data["codclie"], data["codprod"], data["nomprod"]]
+        if not all(required):
+            messagebox.showerror("Ventas", "Complete fecha, cliente, producto y nombre.")
+            return
+        ok, msg = self.service.create_sale(
+            data["fecha"],
+            data["codclie"],
+            data["codprod"],
+            data["nomprod"],
+            data["costovta"],
+            data["canti"],
+            vriva=data["vriva"],
+            username=self.username,
+        )
+        if ok:
+            messagebox.showinfo("Ventas", msg)
+            self.refresh_list()
+        else:
+            messagebox.showerror("Ventas", msg)
+
+    def update_sale(self) -> None:
+        if "update" not in self.actions:
+            return
+        data = self._get_form()
+        if not data["sale_id"]:
+            messagebox.showerror("Ventas", "Seleccione una venta.")
+            return
+        ok, msg = self.service.update_sale(
+            int(data["sale_id"]),
+            data["fecha"],
+            data["codclie"],
+            data["codprod"],
+            data["nomprod"],
+            data["costovta"],
+            data["canti"],
+            vriva=data["vriva"],
+            username=self.username,
+        )
+        if ok:
+            messagebox.showinfo("Ventas", msg)
+            self.refresh_list()
+        else:
+            messagebox.showerror("Ventas", msg)
+
+    def delete_sale(self) -> None:
+        if "delete" not in self.actions:
+            return
+        sale_id = self.entry_id.get().strip()
+        if not sale_id:
+            messagebox.showerror("Ventas", "Seleccione una venta.")
+            return
+        ok, msg = self.service.delete_sale(int(sale_id), username=self.username)
+        if ok:
+            messagebox.showinfo("Ventas", msg)
+            self.clear_form()
+            self.refresh_list()
+        else:
+            messagebox.showerror("Ventas", msg)
+
+    def load_selection(self, event) -> None:
+        selection = event.widget.curselection()
+        if not selection:
+            return
+        sale_id = event.widget.get(selection[0]).split(" |")[0]
+        sale = self.service.read_sale(int(sale_id), username=self.username)
+        if not sale:
+            return
+        self.entry_id.delete(0, END)
+        self.entry_id.insert(0, sale["id"])
+        self.entry_date.delete(0, END)
+        self.entry_date.insert(0, sale["fecha"])
+        self.entry_client.delete(0, END)
+        self.entry_client.insert(0, sale["codclie"])
+        self.entry_product.delete(0, END)
+        self.entry_product.insert(0, sale["codprod"])
+        self.entry_name.delete(0, END)
+        self.entry_name.insert(0, sale["nomprod"])
+        self.entry_price.delete(0, END)
+        self.entry_price.insert(0, sale["costovta"])
+        self.entry_quantity.delete(0, END)
+        self.entry_quantity.insert(0, sale["canti"])
+        self.entry_iva.delete(0, END)
+        self.entry_iva.insert(0, sale["vriva"])
+
+    def clear_form(self) -> None:
+        for entry in (
+            self.entry_id,
+            self.entry_date,
+            self.entry_client,
+            self.entry_product,
+            self.entry_name,
+            self.entry_price,
+            self.entry_quantity,
+            self.entry_iva,
+        ):
+            entry.delete(0, END)
+
+
+def open_sales_window(parent, username: str, level: int) -> None:
+    actions = allowed_actions("sales", level)
+    if not actions:
+        messagebox.showwarning("Ventas", "No tiene permisos para este módulo.")
+        return
+    window = Toplevel(parent)
+    SalesWindow(window, username, level, actions)

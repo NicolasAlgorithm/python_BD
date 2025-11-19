@@ -1,75 +1,177 @@
-from tkinter import *
-from tkinter import messagebox
-from Modules.Custumers import CustumerManager  # Assuming CustumerManager handles CRUD operations
+"""Tkinter window to manage clientes with level-aware permissions."""
 
-class CustumersCRUD:
-    def __init__(self, master):
+from __future__ import annotations
+
+import tkinter as tk
+from tkinter import END, Frame, Label, Listbox, Toplevel, messagebox
+
+from GUI.permissions import allowed_actions
+from Modules.Custumers import (
+    create_client,
+    delete_client,
+    get_client,
+    list_clients,
+    update_client,
+)
+
+
+class ClientsWindow:
+    """CRUD window bound to the clientes table."""
+
+    def __init__(self, master: Toplevel, actions: list[str]) -> None:
         self.master = master
-        self.master.title("Customers CRUD")
-        
-        self.label_id = Label(master, text="Customer ID:")
-        self.label_id.grid(row=0, column=0)
-        self.entry_id = Entry(master)
-        self.entry_id.grid(row=0, column=1)
+        self.actions = actions
+        self.master.title("Clientes")
 
-        self.label_name = Label(master, text="Customer Name:")
-        self.label_name.grid(row=1, column=0)
-        self.entry_name = Entry(master)
-        self.entry_name.grid(row=1, column=1)
+        container = Frame(master)
+        container.pack(padx=12, pady=12, fill="both", expand=True)
 
-        self.label_email = Label(master, text="Customer Email:")
-        self.label_email.grid(row=2, column=0)
-        self.entry_email = Entry(master)
-        self.entry_email.grid(row=2, column=1)
+        Label(container, text="Código").grid(row=0, column=0, sticky="w")
+        self.entry_code = tk.Entry(container)
+        self.entry_code.grid(row=0, column=1, sticky="ew")
 
-        self.button_create = Button(master, text="Create", command=self.create_customer)
-        self.button_create.grid(row=3, column=0)
+        Label(container, text="Nombre").grid(row=1, column=0, sticky="w")
+        self.entry_name = tk.Entry(container)
+        self.entry_name.grid(row=1, column=1, sticky="ew")
 
-        self.button_read = Button(master, text="Read", command=self.read_customer)
-        self.button_read.grid(row=3, column=1)
+        Label(container, text="Dirección").grid(row=2, column=0, sticky="w")
+        self.entry_address = tk.Entry(container)
+        self.entry_address.grid(row=2, column=1, sticky="ew")
 
-        self.button_update = Button(master, text="Update", command=self.update_customer)
-        self.button_update.grid(row=3, column=2)
+        Label(container, text="Teléfono").grid(row=3, column=0, sticky="w")
+        self.entry_phone = tk.Entry(container)
+        self.entry_phone.grid(row=3, column=1, sticky="ew")
 
-        self.button_delete = Button(master, text="Delete", command=self.delete_customer)
-        self.button_delete.grid(row=3, column=3)
+        Label(container, text="Ciudad").grid(row=4, column=0, sticky="w")
+        self.entry_city = tk.Entry(container)
+        self.entry_city.grid(row=4, column=1, sticky="ew")
 
-    def create_customer(self):
-        name = self.entry_name.get()
-        email = self.entry_email.get()
-        if CustumerManager.create(name, email):
-            messagebox.showinfo("Success", "Customer created successfully!")
+        buttons = Frame(container)
+        buttons.grid(row=5, column=0, columnspan=2, pady=8)
+
+        self.btn_create = tk.Button(buttons, text="Crear", command=self.create_client)
+        self.btn_create.grid(row=0, column=0, padx=4)
+        self.btn_update = tk.Button(buttons, text="Actualizar", command=self.update_client)
+        self.btn_update.grid(row=0, column=1, padx=4)
+        self.btn_delete = tk.Button(buttons, text="Eliminar", command=self.delete_client)
+        self.btn_delete.grid(row=0, column=2, padx=4)
+        tk.Button(buttons, text="Limpiar", command=self.clear_form).grid(row=0, column=3, padx=4)
+
+        Label(container, text="Clientes").grid(row=6, column=0, columnspan=2, sticky="w", pady=(10, 0))
+        self.listbox = Listbox(container, height=10, width=50)
+        self.listbox.grid(row=7, column=0, columnspan=2, sticky="nsew")
+        self.listbox.bind("<<ListboxSelect>>", self.load_selection)
+
+        container.columnconfigure(1, weight=1)
+        container.rowconfigure(7, weight=1)
+
+        self._apply_permissions()
+        self.refresh_list()
+
+    def _apply_permissions(self) -> None:
+        if "create" not in self.actions:
+            self.btn_create.config(state=tk.DISABLED)
+        if "update" not in self.actions:
+            self.btn_update.config(state=tk.DISABLED)
+        if "delete" not in self.actions:
+            self.btn_delete.config(state=tk.DISABLED)
+        if "read" not in self.actions:
+            self.listbox.config(state=tk.DISABLED)
+
+    def refresh_list(self) -> None:
+        self.listbox.delete(0, END)
+        for client in list_clients():
+            row = f"{client['codclie']} - {client['nomclie']} ({client['ciudad']})"
+            self.listbox.insert(END, row)
+
+    def _get_form_data(self) -> tuple[str, str, str, str, str]:
+        return (
+            self.entry_code.get().strip(),
+            self.entry_name.get().strip(),
+            self.entry_address.get().strip(),
+            self.entry_phone.get().strip(),
+            self.entry_city.get().strip(),
+        )
+
+    def create_client(self) -> None:
+        if "create" not in self.actions:
+            return
+        codclie, nomclie, direc, telef, ciudad = self._get_form_data()
+        if not codclie or not nomclie:
+            messagebox.showerror("Clientes", "Código y nombre son obligatorios.")
+            return
+        ok, msg = create_client(codclie, nomclie, direc, telef, ciudad)
+        if ok:
+            messagebox.showinfo("Clientes", msg)
+            self.refresh_list()
         else:
-            messagebox.showerror("Error", "Failed to create customer.")
+            messagebox.showerror("Clientes", msg)
 
-    def read_customer(self):
-        customer_id = self.entry_id.get()
-        customer = CustumerManager.read(customer_id)
-        if customer:
-            self.entry_name.delete(0, END)
-            self.entry_name.insert(0, customer['name'])
-            self.entry_email.delete(0, END)
-            self.entry_email.insert(0, customer['email'])
+    def update_client(self) -> None:
+        if "update" not in self.actions:
+            return
+        codclie, nomclie, direc, telef, ciudad = self._get_form_data()
+        if not codclie:
+            messagebox.showerror("Clientes", "Debe seleccionar un cliente.")
+            return
+        ok, msg = update_client(codclie, nomclie, direc, telef, ciudad)
+        if ok:
+            messagebox.showinfo("Clientes", msg)
+            self.refresh_list()
         else:
-            messagebox.showerror("Error", "Customer not found.")
+            messagebox.showerror("Clientes", msg)
 
-    def update_customer(self):
-        customer_id = self.entry_id.get()
-        name = self.entry_name.get()
-        email = self.entry_email.get()
-        if CustumerManager.update(customer_id, name, email):
-            messagebox.showinfo("Success", "Customer updated successfully!")
+    def delete_client(self) -> None:
+        if "delete" not in self.actions:
+            return
+        codclie = self.entry_code.get().strip()
+        if not codclie:
+            messagebox.showerror("Clientes", "Debe seleccionar un cliente.")
+            return
+        ok, msg = delete_client(codclie)
+        if ok:
+            messagebox.showinfo("Clientes", msg)
+            self.clear_form()
+            self.refresh_list()
         else:
-            messagebox.showerror("Error", "Failed to update customer.")
+            messagebox.showerror("Clientes", msg)
 
-    def delete_customer(self):
-        customer_id = self.entry_id.get()
-        if CustumerManager.delete(customer_id):
-            messagebox.showinfo("Success", "Customer deleted successfully!")
-        else:
-            messagebox.showerror("Error", "Failed to delete customer.")
+    def load_selection(self, event) -> None:
+        if "read" not in self.actions:
+            return
+        selection = event.widget.curselection()
+        if not selection:
+            return
+        codclie = event.widget.get(selection[0]).split(" ")[0]
+        client = get_client(codclie)
+        if not client:
+            return
+        self.entry_code.delete(0, END)
+        self.entry_code.insert(0, client["codclie"])
+        self.entry_name.delete(0, END)
+        self.entry_name.insert(0, client["nomclie"])
+        self.entry_address.delete(0, END)
+        self.entry_address.insert(0, client["direc"])
+        self.entry_phone.delete(0, END)
+        self.entry_phone.insert(0, client["telef"])
+        self.entry_city.delete(0, END)
+        self.entry_city.insert(0, client["ciudad"])
 
-if __name__ == "__main__":
-    root = Tk()
-    app = CustumersCRUD(root)
-    root.mainloop()
+    def clear_form(self) -> None:
+        for entry in (
+            self.entry_code,
+            self.entry_name,
+            self.entry_address,
+            self.entry_phone,
+            self.entry_city,
+        ):
+            entry.delete(0, END)
+
+
+def open_clients_window(parent, username: str, level: int) -> None:
+    actions = allowed_actions("clients", level)
+    if not actions:
+        messagebox.showwarning("Clientes", "No tiene permisos para este módulo.")
+        return
+    window = Toplevel(parent)
+    ClientsWindow(window, actions)
