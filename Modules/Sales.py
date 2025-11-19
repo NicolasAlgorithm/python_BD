@@ -23,7 +23,12 @@ class SalesCRUD:
         level = users.get_user_level(username)
         if level is None:
             return False, "Usuario no encontrado."
-        if level < min_level:
+        # In the application a lower numeric `nivel` means more privileges
+        # (1 = admin, 2 = power user, 3 = viewer). `min_level` is the
+        # maximum numeric level allowed to perform the action. Allow the
+        # operation when the user's level is less than or equal to that
+        # threshold.
+        if level > min_level:
             return False, "Acceso denegado: nivel insuficiente."
         return True, ""
 
@@ -74,7 +79,8 @@ class SalesCRUD:
             conn.close()
 
     def read_sale(self, sale_id: int, username: Optional[str] = None) -> Optional[dict[str, Any]]:
-        ok, msg = self._authorize(username, 1)
+        # Allow read access to all levels (1..3)
+        ok, msg = self._authorize(username, 3)
         if not ok:
             return None
         conn = self._connection_factory()
@@ -143,7 +149,8 @@ class SalesCRUD:
             conn.close()
 
     def delete_sale(self, sale_id: int, username: Optional[str] = None) -> tuple[bool, str]:
-        ok, msg = self._authorize(username, 3)
+        # Only users with level 1 or 2 can delete sales (3 = viewer)
+        ok, msg = self._authorize(username, 2)
         if not ok:
             return False, msg
         conn = self._connection_factory()
@@ -159,7 +166,8 @@ class SalesCRUD:
             conn.close()
 
     def list_sales(self, username: Optional[str] = None) -> list[dict[str, Any]]:
-        ok, msg = self._authorize(username, 1)
+        # Listing should be permitted for all levels
+        ok, msg = self._authorize(username, 3)
         if not ok:
             return []
         conn = self._connection_factory()
@@ -180,7 +188,8 @@ class SalesCRUD:
         end_date: str,
         username: Optional[str] = None,
     ) -> List[dict[str, Any]]:
-        ok, msg = self._authorize(username, 1)
+        # Permit filtering by date for all levels
+        ok, msg = self._authorize(username, 3)
         if not ok:
             return []
         conn = self._connection_factory()
@@ -208,7 +217,9 @@ class SalesCRUD:
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
     ) -> List[dict[str, Any]]:
-        ok, msg = self._authorize(username, 1)
+        # Summaries/reports are allowed for all levels (reports may be
+        # restricted at the GUI level by `GUI/permissions.py`)
+        ok, msg = self._authorize(username, 3)
         if not ok:
             return []
         period = period.lower()
