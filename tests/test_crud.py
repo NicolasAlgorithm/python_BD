@@ -1,21 +1,26 @@
-"""Pruebas mínimas para Inventarios, Sales (referencial) y Users (hashing)."""
+"""Unit tests covering the core CRUD flows tied to the SQLite database."""
 
 from __future__ import annotations
 
 import os
+import sqlite3
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from DB.connection import get_connection
 from DB.init_db import initialize_database
-from Modules.Products import ProductsCRUD
 from Modules.Inventarios import InventoriesCRUD
+from Modules.Products import ProductsCRUD
+from Modules.Providers import ProvidersCRUD
 from Modules.Sales import SalesCRUD
 from Modules.Users import UsersCRUD
+from Modules.Custumers import create_client, delete_client
 
 
 class MinimalCrudTests(unittest.TestCase):
+    """Verify that CRUD modules enforce validation and basic flows."""
+
     @classmethod
     def setUpClass(cls) -> None:
         cls._tmp_dir = TemporaryDirectory()
@@ -23,6 +28,7 @@ class MinimalCrudTests(unittest.TestCase):
         os.environ["PYTHON_BD_DB_PATH"] = str(cls._db_path)
         initialize_database(str(cls._db_path))
         cls.products = ProductsCRUD()
+        cls.providers = ProvidersCRUD()
         cls.inventories = InventoriesCRUD()
         cls.sales = SalesCRUD()
         cls.users = UsersCRUD()
@@ -35,11 +41,11 @@ class MinimalCrudTests(unittest.TestCase):
     def tearDown(self) -> None:
         conn = get_connection()
         try:
-            for t in ("ventas", "inventarios", "productos", "clientes", "users"):
+            for table in ("ventas", "inventarios", "productos", "clientes", "users"):
                 try:
-                    conn.execute(f"DELETE FROM {t};")
-                except Exception:
-                    pass
+                    conn.execute(f"DELETE FROM {table};")
+                except sqlite3.OperationalError:
+                    continue
             conn.commit()
         finally:
             conn.close()
@@ -89,7 +95,13 @@ class MinimalCrudTests(unittest.TestCase):
         conn = get_connection()
         try:
             cur = conn.cursor()
-            cur.execute("INSERT OR REPLACE INTO clientes (codclie, nomclie) VALUES (?, ?)", ("C900", "Cliente"))
+            cur.execute(
+                """
+                INSERT OR REPLACE INTO clientes (codclie, nomclie, direc, telef, ciudad)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                ("C900", "Cliente", "Calle 123", "5550000", "Ciudad"),
+            )
             conn.commit()
         finally:
             conn.close()
