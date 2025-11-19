@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import sqlite3
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -11,7 +12,6 @@ from DB.connection import get_connection
 from DB.init_db import initialize_database
 from Modules.Inventarios import InventoriesCRUD
 from Modules.Products import ProductsCRUD
-from Modules.Inventarios import InventoriesCRUD
 from Modules.Sales import SalesCRUD
 from Modules.Users import UsersCRUD
 
@@ -24,8 +24,9 @@ class MinimalCrudTests(unittest.TestCase):
         os.environ["PYTHON_BD_DB_PATH"] = str(cls._db_path)
         initialize_database(str(cls._db_path))
         cls.products = ProductsCRUD()
-        cls.providers = ProvidersCRUD()
         cls.inventories = InventoriesCRUD()
+        cls.sales = SalesCRUD()
+        cls.users = UsersCRUD()
 
     @classmethod
     def tearDownClass(cls) -> None:
@@ -36,9 +37,40 @@ class MinimalCrudTests(unittest.TestCase):
         conn = get_connection()
         try:
             # Keep FK checks happy by clearing child tables first.
-            conn.execute("DELETE FROM inventarios;")
-            conn.execute("DELETE FROM proveedores;")
-            conn.execute("DELETE FROM productos;")
+            for table in (
+                "ventas",
+                "inventarios",
+                "proveedores",
+                "clientes",
+                "productos",
+                "users",
+            ):
+                try:
+                    conn.execute(f"DELETE FROM {table};")
+                except sqlite3.OperationalError:
+                    # Some optional tables (like users) may not exist yet.
+                    continue
+            conn.commit()
+        finally:
+            conn.close()
+
+    def _insert_client(
+        self,
+        client_id: str,
+        name: str = "Cliente Test",
+        address: str = "Calle 123",
+        phone: str = "3000000000",
+        city: str = "Bogota",
+    ) -> None:
+        conn = get_connection()
+        try:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO clientes (codclie, nomclie, direc, telef, ciudad)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (client_id, name, address, phone, city),
+            )
             conn.commit()
         finally:
             conn.close()
