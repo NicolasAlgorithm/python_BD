@@ -29,7 +29,9 @@ class SalesCRUD:
         # operation when the user's level is less than or equal to that
         # threshold.
         if level > min_level:
-            return False, "Acceso denegado: nivel insuficiente."
+            if min_level == 1:
+                return False, "Acceso denegado: solo administradores (nivel 1) pueden realizar esta operación."
+            return False, f"Acceso denegado: se requiere nivel {min_level} para esta operación."
         return True, ""
 
     def create_sale(

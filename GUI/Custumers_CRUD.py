@@ -109,6 +109,7 @@ class ClientsWindow:
 
     def update_client(self) -> None:
         if "update" not in self.actions:
+            messagebox.showerror("Clientes", "No tiene permiso para actualizar (nivel insuficiente).")
             return
         codclie, nomclie, direc, telef, ciudad = self._get_form_data()
         if not codclie:
@@ -123,6 +124,7 @@ class ClientsWindow:
 
     def delete_client(self) -> None:
         if "delete" not in self.actions:
+            messagebox.showerror("Clientes", "No tiene permiso para eliminar (nivel insuficiente).")
             return
         codclie = self.entry_code.get().strip()
         if not codclie:

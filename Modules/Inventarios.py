@@ -33,8 +33,13 @@ class InventoriesCRUD:
         level = users.get_user_level(username)
         if level is None:
             return False, "Usuario no encontrado."
-        if level < min_level:
-            return False, "Acceso denegado: nivel insuficiente."
+        # Lower numeric value = more privileges (1 = admin). Deny when
+        # user's numeric level is greater than the maximum allowed
+        # (`min_level` here represents the highest numeric level allowed).
+        if level > min_level:
+            if min_level == 1:
+                return False, "Acceso denegado: solo administradores (nivel 1) pueden realizar esta operación."
+            return False, f"Acceso denegado: se requiere nivel {min_level} para esta operación."
         return True, ""
 
     def create_inventory(
@@ -78,7 +83,8 @@ class InventoriesCRUD:
             conn.close()
 
     def read_inventory(self, codprod: str, username: Optional[str] = None) -> Optional[dict]:
-        ok, msg = self._authorize(username, 1)
+        # Allow read access to all levels
+        ok, msg = self._authorize(username, 3)
         if not ok:
             return None
         conn = self._connection_factory()
@@ -105,7 +111,8 @@ class InventoriesCRUD:
         costovta: float,
         username: Optional[str] = None,
     ) -> tuple[bool, str]:
-        ok, msg = self._authorize(username, 2)
+        # Only admin (nivel 1) can update inventories
+        ok, msg = self._authorize(username, 1)
         if not ok:
             return False, msg
 
@@ -137,7 +144,8 @@ class InventoriesCRUD:
             conn.close()
 
     def delete_inventory(self, codprod: str, username: Optional[str] = None) -> tuple[bool, str]:
-        ok, msg = self._authorize(username, 3)
+        # Only admin (nivel 1) can delete inventories
+        ok, msg = self._authorize(username, 1)
         if not ok:
             return False, msg
         conn = self._connection_factory()
@@ -153,7 +161,8 @@ class InventoriesCRUD:
             conn.close()
 
     def list_inventories(self, username: Optional[str] = None) -> List[dict]:
-        ok, msg = self._authorize(username, 1)
+        # Listing is allowed for all levels
+        ok, msg = self._authorize(username, 3)
         if not ok:
             return []
         conn = self._connection_factory()
