@@ -7,6 +7,7 @@ from tkinter import END, Frame, Label, Listbox, Scrollbar, Toplevel, messagebox
 
 from GUI.permissions import allowed_actions
 from Modules.Sales import SalesCRUD
+from Modules.Products import ProductsCRUD
 
 
 class SalesWindow:
@@ -39,6 +40,9 @@ class SalesWindow:
         Label(frame, text="Producto").grid(row=3, column=0, sticky="w")
         self.entry_product = tk.Entry(frame)
         self.entry_product.grid(row=3, column=1, sticky="ew")
+        # Autocompletar nombre/precio/iva cuando el código de producto cambia
+        self.entry_product.bind("<FocusOut>", self._on_product_change)
+        self.entry_product.bind("<Return>", self._on_product_change)
 
         Label(frame, text="Nombre producto").grid(row=4, column=0, sticky="w")
         self.entry_name = tk.Entry(frame)
@@ -125,6 +129,28 @@ class SalesWindow:
             "canti": self._parse_int(self.entry_quantity.get()),
             "vriva": self._parse_float(self.entry_iva.get()),
         }
+
+    def _on_product_change(self, event=None) -> None:
+        """When product code is entered, fetch product data and fill fields."""
+        codprod = self.entry_product.get().strip()
+        if not codprod:
+            return
+        prod_service = ProductsCRUD()
+        prod = prod_service.read_product(codprod)
+        if not prod:
+            # If product not found, don't overwrite fields but inform user
+            # (silent failure is preferred in form flow).
+            return
+        # Fill name, price and iva if available
+        if prod.get("nomprod"):
+            self.entry_name.delete(0, END)
+            self.entry_name.insert(0, prod["nomprod"])
+        if prod.get("costovta") is not None:
+            self.entry_price.delete(0, END)
+            self.entry_price.insert(0, str(prod["costovta"]))
+        if prod.get("iva") is not None:
+            self.entry_iva.delete(0, END)
+            self.entry_iva.insert(0, str(prod["iva"]))
 
     def create_sale(self) -> None:
         if "create" not in self.actions:
