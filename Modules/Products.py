@@ -5,7 +5,34 @@ from __future__ import annotations
 from typing import Callable, Optional
 
 from DB.connection import get_connection
+import sqlite3
 
+def get_products_with_provider(db_path="db/app.db"):
+    """
+    Devuelve productos con información básica del proveedor.
+    Campos: product_id, product_name, price, provider_id, provider_name
+    """
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+
+    sql = """
+    SELECT
+        p.id AS product_id,
+        COALESCE(p.name, p.nombre, '') AS product_name,
+        p.price AS price,
+        prov.id AS provider_id,
+        COALESCE(prov.name, prov.razon_social, '') AS provider_name
+    FROM Products p
+    LEFT JOIN Providers prov ON p.provider_id = prov.id
+    ORDER BY p.id
+    """
+
+    try:
+        rows = cursor.execute(sql).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
 
 class ProductsCRUD:
     """Encapsula las operaciones CRUD sobre la tabla productos."""

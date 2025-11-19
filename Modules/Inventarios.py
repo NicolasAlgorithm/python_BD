@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Callable, Optional, Tuple
 
 from DB.connection import get_connection
+import sqlite3
 
 
 class InventoriesCRUD:
@@ -146,3 +147,33 @@ class InventoriesCRUD:
             return True, "Inventario eliminado."
         finally:
             conn.close()
+
+
+def get_inventory_with_products_providers(db_path="db/app.db"):
+    """
+    Devuelve registros de inventario junto con información del producto y su proveedor.
+    Campos devueltos: inventory_id, stock, product_id, product_name, provider_id, provider_name
+    """
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+
+    sql = """
+    SELECT
+        i.id AS inventory_id,
+        i.stock AS stock,
+        p.id AS product_id,
+        COALESCE(p.name, p.nombre, '') AS product_name,
+        prov.id AS provider_id,
+        COALESCE(prov.name, prov.razon_social, '') AS provider_name
+    FROM Inventarios i
+    LEFT JOIN Products p ON i.product_id = p.id
+    LEFT JOIN Providers prov ON p.provider_id = prov.id
+    ORDER BY p.id
+    """
+
+    try:
+        rows = cursor.execute(sql).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
