@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any, Callable, Optional
 
 from DB.connection import get_connection
+import sqlite3
 
 
 class SalesCRUD:
@@ -173,102 +174,37 @@ class SalesCRUD:
         finally:
             conn.close()
 
-    def list_sales_by_date_range(self, start_date: str, end_date: str, username: Optional[str] = None) -> list[dict[str, Any]]:
-        """Return sales between start_date and end_date inclusive. Dates in 'YYYY-MM-DD' format."""
-        ok, msg = self._authorize(username, 1)
-        if not ok:
-            return []
-        conn = self._connection_factory()
-        try:
-            cur = conn.cursor()
-            cur.execute(
-                """
-                SELECT id, fecha, codclie, codprod, nomprod, costovta, canti, vriva, subtotal, vrtotal
-                FROM ventas
-                WHERE fecha BETWEEN ? AND ?
-                ORDER BY fecha, id
-                """,
-                (start_date, end_date),
-            )
-            rows = cur.fetchall()
-            columns = [desc[0] for desc in cur.description]
-            return [dict(zip(columns, row)) for row in rows]
-        finally:
-            conn.close()
 
-    def list_sales_by_week(self, year: int, week: int, username: Optional[str] = None) -> list[dict[str, Any]]:
-        """
-        Return sales for a given year and week number.
-        week: ISO-like week number expected as integer (0-53). Uses SQLite strftime('%W') semantics.
-        """
-        ok, msg = self._authorize(username, 1)
-        if not ok:
-            return []
-        y = str(year)
-        wk = f"{week:02d}"
-        conn = self._connection_factory()
-        try:
-            cur = conn.cursor()
-            cur.execute(
-                """
-                SELECT id, fecha, codclie, codprod, nomprod, costovta, canti, vriva, subtotal, vrtotal
-                FROM ventas
-                WHERE strftime('%Y', fecha) = ? AND strftime('%W', fecha) = ?
-                ORDER BY fecha, id
-                """,
-                (y, wk),
-            )
-            rows = cur.fetchall()
-            columns = [desc[0] for desc in cur.description]
-            return [dict(zip(columns, row)) for row in rows]
-        finally:
-            conn.close()
+def get_sales_with_customers_products(db_path="db/app.db"):
+    """
+    Devuelve las ventas junto con los datos del cliente y los productos vendidos.
+    Retorna una lista de diccionarios con campos: sale_id, sale_date, sale_total,
+    customer_id, customer_name, product_id, product_name, quantity, unit_price.
+    """
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
 
-    def list_sales_by_month(self, year: int, month: int, username: Optional[str] = None) -> list[dict[str, Any]]:
-        """Return sales for a specific year and month (month: 1-12)."""
-        ok, msg = self._authorize(username, 1)
-        if not ok:
-            return []
-        y = str(year)
-        m = f"{month:02d}"
-        conn = self._connection_factory()
-        try:
-            cur = conn.cursor()
-            cur.execute(
-                """
-                SELECT id, fecha, codclie, codprod, nomprod, costovta, canti, vriva, subtotal, vrtotal
-                FROM ventas
-                WHERE strftime('%Y', fecha) = ? AND strftime('%m', fecha) = ?
-                ORDER BY fecha, id
-                """,
-                (y, m),
-            )
-            rows = cur.fetchall()
-            columns = [desc[0] for desc in cur.description]
-            return [dict(zip(columns, row)) for row in rows]
-        finally:
-            conn.close()
+    sql = """
+    SELECT
+        s.id AS sale_id,
+        s.date AS sale_date,
+        s.total AS sale_total,
+        c.id AS customer_id,
+        COALESCE(c.name, c.nomcli, '') AS customer_name,
+        p.id AS product_id,
+        COALESCE(p.name, p.nombre, '') AS product_name,
+        sd.quantity AS quantity,
+        sd.price AS unit_price
+    FROM Sales s
+    LEFT JOIN Custumers c ON s.customer_id = c.id OR s.customer_id = c.nomcli
+    LEFT JOIN SalesDetails sd ON sd.sale_id = s.id
+    LEFT JOIN Products p ON sd.product_id = p.id
+    ORDER BY s.date DESC, s.id
+    """
 
-    def list_sales_by_year(self, year: int, username: Optional[str] = None) -> list[dict[str, Any]]:
-        """Return sales for a specific year."""
-        ok, msg = self._authorize(username, 1)
-        if not ok:
-            return []
-        y = str(year)
-        conn = self._connection_factory()
-        try:
-            cur = conn.cursor()
-            cur.execute(
-                """
-                SELECT id, fecha, codclie, codprod, nomprod, costovta, canti, vriva, subtotal, vrtotal
-                FROM ventas
-                WHERE strftime('%Y', fecha) = ?
-                ORDER BY fecha, id
-                """,
-                (y,),
-            )
-            rows = cur.fetchall()
-            columns = [desc[0] for desc in cur.description]
-            return [dict(zip(columns, row)) for row in rows]
-        finally:
-            conn.close()
+    try:
+        rows = cursor.execute(sql).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
